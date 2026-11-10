@@ -1,0 +1,32 @@
+# Node
+node_modules/
+frontend/node_modules/
+contract/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+backend/src/main/resources/static/
+
+# Maven
+backend/target/
+
+# Runtime data
+backend/data/
+/data/
+*.db
+*.db-shm
+*.db-wal
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Logs
+*.log
+
+# Local secrets
+.env
+.env.*
+!.env.example
