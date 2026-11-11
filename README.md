@@ -12,7 +12,7 @@
 Это продолжение [первого проекта](https://github.com/ElikCandy2026/ai-for-developers-project-386):
 исходная спецификация — [issue #8](https://github.com/ElikCandy2026/ai-for-developers-project-386/issues/8),
 принятые решения — [issue #1](https://github.com/ElikCandy2026/ai-for-developers-project-386/issues/1)
-и [`docs/adr/`](docs/adr/).
+и [`docs/adr/`](docs/adr/). Критерии ревью — в [`REVIEW.md`](REVIEW.md).
 
 Небольшой законченный сервис бронирования времени по мотивам [Cal.com](https://cal.com/):
 владелец публикует типы встреч и свободные слоты, гость без регистрации выбирает
@@ -490,6 +490,32 @@ Workflow [`.github/workflows/triage.yml`](.github/workflows/triage.yml)
 Тикеты, созданные через `to-spec` и `to-tickets`, сразу получают
 `ready-for-agent` (или `ready-for-human`), поэтому автотриаж их пропускает.
 Результат прогона виден в Actions, в job `triage`.
+
+### Авторевью pull request
+
+Workflow [`.github/workflows/review.yml`](.github/workflows/review.yml)
+запускается на `pull_request` и ревьюит diff автоматически, без команды `/oc`.
+Критерии лежат в [`REVIEW.md`](REVIEW.md): соответствие задаче, корректность и
+тесты, контракт и данные, безопасность, качество кода, документация, риск и
+откат. Агент не меняет код, а публикует в PR один комментарий с блокирующими и
+неблокирующими замечаниями.
+
+| Параметр | Значение |
+| --- | --- |
+| События | `pull_request`: `opened`, `reopened`, `synchronize`, `ready_for_review` |
+| Пропуск | черновики и PR из форков не ревьюятся: у форков токен только на чтение |
+| Критерии | [`REVIEW.md`](REVIEW.md), подключён в `prompt` |
+| Модель | `opencode/deepseek-v4.1-flash-free` |
+| Права | `contents: read`, `pull-requests: write`, `issues: write` |
+| Таймаут | `timeout-minutes: 30` |
+| Устаревшее ревью | `concurrency` по номеру PR с `cancel-in-progress: true`: новый коммит отменяет предыдущий прогон |
+| Лимит запусков | `MAX_REVIEWS: "3"` завершённых ревью на PR; проверка выполняется отдельным шагом до вызова модели, при исчерпании модель не запускается |
+| Учёт лимита | считаются комментарии с маркером `<!-- opencode-auto-review -->`; отменённые прогоны лимит не расходуют |
+| Шаблон PR | [`.github/pull_request_template.md`](.github/pull_request_template.md) с разделами «Проверки», «Риск» и «Откат» |
+| Где смотреть результат | комментарий в PR и прогон в [Actions](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/workflows/review.yml) |
+
+PR, созданные от `GITHUB_TOKEN` (например, release-please), не запускают этот
+workflow: GitHub не шлёт события на действия такого токена.
 
 При добавлении новых workflow дополняйте этот раздел: событие, модель,
 назначение и место просмотра результатов.

@@ -1,0 +1,76 @@
+name: review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+jobs:
+  review:
+    if: |
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check review budget
+        id: budget
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          MAX_REVIEWS: "3"
+          REVIEW_MARKER: "<!-- opencode-auto-review -->"
+        run: |
+          set -euo pipefail
+          count=$(gh api --paginate "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" \
+            | jq --arg marker "${REVIEW_MARKER}" -s \
+              '[.[][] | select(.body | contains($marker))] | length')
+          echo "Completed auto-reviews for PR #${PR_NUMBER}: ${count}/${MAX_REVIEWS}"
+          if [ "${count}" -ge "${MAX_REVIEWS}" ]; then
+            echo "skip=true" >> "${GITHUB_OUTPUT}"
+            echo "Review budget exhausted; the model will not be called."
+          else
+            echo "skip=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Run opencode review
+        if: steps.budget.outputs.skip != 'true'
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: opencode/deepseek-v4.1-flash-free
+          use_github_token: true
+          share: false
+          prompt: |
+            Ты — независимый ревьюер pull request в репозитории Callbook.
+            Не меняй код, не создавай коммиты и ветки. Твоя задача — проверить
+            diff PR и оставить один комментарий.
+
+            1. Прочитай REVIEW.md в корне репозитория и применяй его критерии
+               как чек-лист.
+            2. Изучи только изменения PR относительно базовой ветки:
+               `git diff origin/${{ github.event.pull_request.base.ref }}...HEAD`.
+               При необходимости прочитай окружающий код и ADR.
+            3. Проверь разделы PR «Проверки», «Риск» и «Откат». Если они пустые
+               или не соответствуют diff, это блокирующее замечание.
+            4. Начни комментарий строкой `<!-- opencode-auto-review -->`:
+               по этому маркеру workflow считает израсходованный лимит ревью.
+            5. Формат: `## Авторевью`, затем `### Блокирующие` и
+               `### Неблокирующие`. Для каждого замечания укажи `file:line`,
+               суть и что исправить. Если замечаний нет, напиши это явно и
+               перечисли проверенные критерии.
+            6. Не пересказывай diff и не хвали автора. Пиши по-русски, кратко.
