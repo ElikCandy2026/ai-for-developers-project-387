@@ -470,6 +470,27 @@ OpenCode по команде в комментарии.
 использует `GITHUB_TOKEN` (`use_github_token: true`), поэтому отдельное приложение
 OpenCode устанавливать не нужно.
 
+### Автотриаж новых issues
+
+Workflow [`.github/workflows/triage.yml`](.github/workflows/triage.yml)
+запускается на `issues: [opened]` и просит OpenCode разобрать новое обращение:
+определить категорию (`bug`/`enhancement`), поставить ровно одну метку состояния
+и оставить комментарий с итогами триажа.
+
+| Параметр | Значение |
+| --- | --- |
+| Событие | `issues: [opened]` — только создание issue |
+| Prompt | инструкция разобрать issue по `docs/agents/` и не менять код |
+| Модель | `opencode/deepseek-v4.1-flash-free` |
+| Авторы | только `OWNER`, `MEMBER` и `COLLABORATOR`; боты игнорируются |
+| Таймаут | `timeout-minutes: 30` |
+| Параллельность | `concurrency` по номеру issue, `cancel-in-progress: false` |
+| Пропуск | issue с `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human` или `wontfix` повторно не разбираются |
+
+Тикеты, созданные через `to-spec` и `to-tickets`, сразу получают
+`ready-for-agent` (или `ready-for-human`), поэтому автотриаж их пропускает.
+Результат прогона виден в Actions, в job `triage`.
+
 При добавлении новых workflow дополняйте этот раздел: событие, модель,
 назначение и место просмотра результатов.
 
