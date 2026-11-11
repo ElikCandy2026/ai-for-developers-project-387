@@ -100,6 +100,17 @@ const booking: Booking = {
   createdAt: '2026-11-10T00:00:00.000Z',
 };
 
+function mockLoadedApp() {
+  vi.mocked(api.fetchBootstrap).mockResolvedValue({
+    ok: true,
+    data: { owner, meetingTypes },
+  });
+  vi.mocked(api.fetchAvailability).mockImplementation(async (meetingTypeId) => {
+    const type = meetingTypes.find((item) => item.id === meetingTypeId) ?? introType;
+    return { ok: true, data: availabilityFor(type) };
+  });
+}
+
 describe('App guest page', () => {
   afterEach(() => {
     cleanup();
@@ -107,16 +118,8 @@ describe('App guest page', () => {
 
   beforeEach(() => {
     window.history.replaceState(null, '', '/');
-    vi.mocked(api.fetchBootstrap).mockResolvedValue({
-      ok: true,
-      data: { owner, meetingTypes },
-    });
-    vi.mocked(api.fetchAvailability).mockImplementation(async (meetingTypeId) => {
-      const type = meetingTypes.find((item) => item.id === meetingTypeId) ?? introType;
-      return { ok: true, data: availabilityFor(type) };
-    });
+    mockLoadedApp();
     vi.mocked(api.createBooking).mockResolvedValue({ ok: true, data: booking });
-    vi.mocked(api.fetchUpcomingBookings).mockResolvedValue({ ok: true, data: [] });
   });
 
   it('shows meeting types and opens the calendar for the selected type', async () => {
@@ -174,14 +177,7 @@ describe('App owner identity', () => {
   });
 
   beforeEach(() => {
-    vi.mocked(api.fetchBootstrap).mockResolvedValue({
-      ok: true,
-      data: { owner, meetingTypes },
-    });
-    vi.mocked(api.fetchAvailability).mockResolvedValue({
-      ok: true,
-      data: availabilityFor(introType),
-    });
+    mockLoadedApp();
     vi.mocked(api.fetchUpcomingBookings).mockResolvedValue({ ok: true, data: [] });
   });
 
