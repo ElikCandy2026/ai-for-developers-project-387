@@ -10,6 +10,7 @@ import {
   formatTimeRange,
   formatTimezoneOffset,
   isoToLocalDate,
+  ownerInitials,
   todayInZone,
 } from '../lib/format';
 import {
@@ -59,12 +60,7 @@ export function OwnerDashboard({
   const [createError, setCreateError] = useState<string | null>(null);
   const [createdName, setCreatedName] = useState<string | null>(null);
 
-  const initials = owner.displayName
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('');
+  const initials = ownerInitials(owner.displayName);
 
   useEffect(() => {
     if (!createdName) {
