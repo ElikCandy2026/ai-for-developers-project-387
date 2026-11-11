@@ -40,7 +40,7 @@ jobs:
           # when earlier runs failed or were cancelled.
           runs=$(gh api --paginate \
             "repos/${GH_REPO}/actions/runs?event=pull_request&branch=${HEAD_REF}&per_page=100" \
-            | jq --arg wf "review.yml" -s \
+            | jq --arg wf "${WORKFLOW_FILE}" -s \
               '[.[] | .workflow_runs[] | select(.path == (".github/workflows/" + $wf))] | length')
           echo "Review runs for ${HEAD_REF}: ${runs}/${MAX_RUNS} (including this run)"
           if [ "${runs}" -gt "${MAX_RUNS}" ]; then
