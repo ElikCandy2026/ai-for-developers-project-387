@@ -12,6 +12,7 @@ import {
   formatMonthLong,
   formatTime,
   formatTimezoneOffset,
+  ownerInitials,
   relativeDateLabel,
   todayInZone,
   WEEKDAY_LONG,
@@ -29,6 +30,7 @@ type GuestBookingProps = {
 export function GuestBooking({ owner, meetingTypes, onOpenOwner }: GuestBookingProps) {
   const timezone = owner.rules.timezone;
   const timezoneOffset = useMemo(() => formatTimezoneOffset(timezone), [timezone]);
+  const ownerInitial = ownerInitials(owner.displayName);
   const today = todayInZone(timezone);
 
   const [selectedTypeId, setSelectedTypeId] = useState<string | null>(meetingTypes[0]?.id ?? null);
@@ -134,7 +136,7 @@ export function GuestBooking({ owner, meetingTypes, onOpenOwner }: GuestBookingP
               Онлайн
             </span>
           </div>
-          <div className="owner-avatar">АС</div>
+          <div className="owner-avatar">{ownerInitial}</div>
           <h2>{owner.displayName}</h2>
           <p className="muted">Онлайн-встречи по видеосвязи</p>
           <div className="spotlight-rules">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { MeetingType } from './data/api';
 import { fetchBootstrap } from './data/api';
@@ -6,7 +6,7 @@ import { GuestBooking } from './components/GuestBooking';
 import { AlertIcon, PhoneIcon, RefreshIcon } from './components/Icons';
 import { OwnerDashboard } from './components/OwnerDashboard';
 import { useResource } from './data/useResource';
-import { formatTimezoneOffset } from './lib/format';
+import { formatTimezoneOffset, ownerInitials } from './lib/format';
 
 type View = 'guest' | 'owner';
 
@@ -33,16 +33,7 @@ export default function App() {
     );
   }
 
-  const initials = useMemo(
-    () =>
-      owner?.displayName
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part[0]?.toUpperCase())
-        .join('') ?? '',
-    [owner],
-  );
+  const initials = ownerInitials(owner?.displayName ?? '');
 
   return (
     <div className="app-shell">

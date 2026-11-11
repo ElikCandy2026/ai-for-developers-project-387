@@ -15,6 +15,7 @@ vi.mock('./data/api', async (importOriginal) => {
     createBooking: vi.fn(),
     fetchAvailability: vi.fn(),
     fetchBootstrap: vi.fn(),
+    fetchUpcomingBookings: vi.fn(),
   };
 });
 
@@ -115,6 +116,7 @@ describe('App guest page', () => {
       return { ok: true, data: availabilityFor(type) };
     });
     vi.mocked(api.createBooking).mockResolvedValue({ ok: true, data: booking });
+    vi.mocked(api.fetchUpcomingBookings).mockResolvedValue({ ok: true, data: [] });
   });
 
   it('shows meeting types and opens the calendar for the selected type', async () => {
@@ -163,5 +165,43 @@ describe('App guest page', () => {
       guestEmail: 'ivan@example.com',
       notes: undefined,
     });
+  });
+});
+
+describe('App owner initials', () => {
+  const renamedOwner: Owner = { ...owner, displayName: 'Пафнутий Евлампиевич' };
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  beforeEach(() => {
+    vi.mocked(api.fetchBootstrap).mockResolvedValue({
+      ok: true,
+      data: { owner: renamedOwner, meetingTypes },
+    });
+    vi.mocked(api.fetchAvailability).mockResolvedValue({
+      ok: true,
+      data: availabilityFor(introType),
+    });
+    vi.mocked(api.fetchUpcomingBookings).mockResolvedValue({ ok: true, data: [] });
+  });
+
+  it('derives the guest page initials from the owner display name', async () => {
+    window.history.replaceState(null, '', '/');
+    render(<App />);
+
+    expect(await screen.findByText('ПЕ', { selector: '.header-avatar' })).toBeTruthy();
+    expect(screen.getByText('ПЕ', { selector: '.owner-avatar' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Пафнутий Евлампиевич' })).toBeTruthy();
+  });
+
+  it('shows the same initials in the owner dashboard', async () => {
+    window.history.replaceState(null, '', '#owner');
+    render(<App />);
+
+    expect(await screen.findByText('ПЕ', { selector: '.owner-avatar.small' })).toBeTruthy();
+    expect(screen.getByText('ПЕ', { selector: '.header-avatar' })).toBeTruthy();
+    expect(screen.getByText('Пафнутий Евлампиевич')).toBeTruthy();
   });
 });
