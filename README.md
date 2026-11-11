@@ -146,7 +146,7 @@ Render](#данные-на-render).
 │       └── lib/                  форматирование дат
 ├── Dockerfile                    многостадийная сборка образа
 ├── opencode.json                 безопасная MCP-конфигурация Render
-├── .github/workflows/ci.yml      make install && make verify
+├── .github/workflows/            CI, opencode, release-please, hexlet-check
 ├── .nvmrc                        версия Node для генерации и сборки
 ├── docs/                         скриншоты и инструкции для агентов
 ├── Makefile
@@ -425,6 +425,43 @@ Java 21 и запускает ту же команду (`make install && make ve
 | `make verify` | `check-generated` + линтер + фронтенд + vitest + граница + тесты + e2e |
 | `make run` | сборка и запуск приложения |
 | `make clean` | удаляет `backend/target` и `frontend/dist` |
+
+## Агент в GitHub
+
+Интерактивный workflow
+[`.github/workflows/opencode.yml`](.github/workflows/opencode.yml) запускает
+OpenCode по команде в комментарии.
+
+| Параметр | Значение |
+| --- | --- |
+| События | `issue_comment` — комментарий к issue или pull request; `pull_request_review_comment` — комментарий к строке diff |
+| Фильтр событий | `types: [created]`: редактирование комментария повторный запуск не вызывает |
+| Команды | `/oc` и `/opencode` в начале или внутри текста (`mentions: /opencode,/oc`) |
+| Модель | `opencode/deepseek-v4.1-flash-free` (бесплатная модель OpenCode Zen) |
+| Назначение | ответить на вопрос по issue/PR, разобрать код или внести изменение в ветку/PR |
+| Где смотреть результат | ответ агента в issue/PR и прогон в [Actions](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/workflows/opencode.yml); логи — в job `opencode` |
+| Авторы | только `OWNER`, `MEMBER` и `COLLABORATOR`, причём в тексте должна быть команда |
+| Боты | комментарии с `user.type == 'Bot'` и логином `[bot]` игнорируются, чтобы агент не отвечал на собственные сообщения |
+| Share | `share: false` — сессии OpenCode не публикуются; в issue/PR попадает только ответ агента |
+| Таймаут | `timeout-minutes: 30` |
+| Параллельность | `concurrency` группирует запуски по номеру issue или PR, поэтому по одному обсуждению одновременно идёт не больше одного прогона |
+
+Для недоверенных авторов, в том числе в комментариях к fork-PR, job не
+запускается, поэтому секреты им не передаются. Комментарии ботов отсекаются
+отдельно: они не должны вызывать агента даже при наличии команды в тексте.
+
+`cancel-in-progress: false` ставит новый запуск в очередь, а не обрывает текущий.
+Кнопка **Cancel workflow** останавливает текущий прогон, **Disable workflow**
+отключает будущие. Запрос, уже отправленный провайдеру модели, может продолжиться
+по правилам провайдера; при необходимости ключ отзывается в OpenCode Console.
+
+Для бесплатной модели ключ не обязателен. Для платной модели добавьте
+`OPENCODE_API_KEY` в **Settings → Secrets and variables → Actions**. Workflow
+использует `GITHUB_TOKEN` (`use_github_token: true`), поэтому отдельное приложение
+OpenCode устанавливать не нужно.
+
+При добавлении новых workflow дополняйте этот раздел: событие, модель,
+назначение и место просмотра результатов.
 
 ## Релизы
 
