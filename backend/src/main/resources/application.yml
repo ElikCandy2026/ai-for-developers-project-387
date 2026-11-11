@@ -17,9 +17,9 @@ app:
   database-path: ${DB_PATH:./data/call-booking.db}
   seed-demo-data: ${SEED_DEMO_DATA:true}
   owner:
-    id: owner_anna
-    display-name: Анна Соколова
-    email: anna.sokolova@callbook.local
+    id: owner_pafnuty
+    display-name: Пафнутий Евлампиевич
+    email: pafnuty.evlampevich@callbook.local
     timezone: Europe/Moscow
     working-days:
       - MONDAY
