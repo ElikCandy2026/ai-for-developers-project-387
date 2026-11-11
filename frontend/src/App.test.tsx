@@ -20,9 +20,9 @@ vi.mock('./data/api', async (importOriginal) => {
 });
 
 const owner: Owner = {
-  id: 'owner_anna',
-  displayName: 'Анна Соколова',
-  email: 'anna.sokolova@callbook.local',
+  id: 'owner_pafnuty',
+  displayName: 'Пафнутий Евлампиевич',
+  email: 'pafnuty.evlampevich@callbook.local',
   rules: {
     timezone: 'Europe/Moscow',
     workingDays: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
@@ -168,9 +168,7 @@ describe('App guest page', () => {
   });
 });
 
-describe('App owner initials', () => {
-  const renamedOwner: Owner = { ...owner, displayName: 'Пафнутий Евлампиевич' };
-
+describe('App owner identity', () => {
   afterEach(() => {
     cleanup();
   });
@@ -178,7 +176,7 @@ describe('App owner initials', () => {
   beforeEach(() => {
     vi.mocked(api.fetchBootstrap).mockResolvedValue({
       ok: true,
-      data: { owner: renamedOwner, meetingTypes },
+      data: { owner, meetingTypes },
     });
     vi.mocked(api.fetchAvailability).mockResolvedValue({
       ok: true,
@@ -187,21 +185,26 @@ describe('App owner initials', () => {
     vi.mocked(api.fetchUpcomingBookings).mockResolvedValue({ ok: true, data: [] });
   });
 
-  it('derives the guest page initials from the owner display name', async () => {
+  it('shows the owner name and initials on the guest page', async () => {
     window.history.replaceState(null, '', '/');
     render(<App />);
 
     expect(await screen.findByText('ПЕ', { selector: '.header-avatar' })).toBeTruthy();
     expect(screen.getByText('ПЕ', { selector: '.owner-avatar' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Пафнутий Евлампиевич' })).toBeTruthy();
+    expect(screen.queryByText('АС')).toBeNull();
+    expect(screen.queryByText('Анна Соколова')).toBeNull();
   });
 
-  it('shows the same initials in the owner dashboard', async () => {
+  it('shows the same name and initials in the owner dashboard', async () => {
     window.history.replaceState(null, '', '#owner');
     render(<App />);
 
     expect(await screen.findByText('ПЕ', { selector: '.owner-avatar.small' })).toBeTruthy();
     expect(screen.getByText('ПЕ', { selector: '.header-avatar' })).toBeTruthy();
     expect(screen.getByText('Пафнутий Евлампиевич')).toBeTruthy();
+    expect(screen.getByText('pafnuty.evlampevich@callbook.local')).toBeTruthy();
+    expect(screen.queryByText('АС')).toBeNull();
+    expect(screen.queryByText('Анна Соколова')).toBeNull();
   });
 });
