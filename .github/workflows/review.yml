@@ -18,6 +18,7 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
+      actions: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -29,18 +30,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          MAX_REVIEWS: "3"
-          REVIEW_MARKER: "<!-- opencode-auto-review -->"
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          MAX_RUNS: "5"
+          WORKFLOW_FILE: review.yml
         run: |
           set -euo pipefail
-          count=$(gh api --paginate "repos/${GH_REPO}/issues/${PR_NUMBER}/comments" \
-            | jq --arg marker "${REVIEW_MARKER}" -s \
-              '[.[][] | select(.body | contains($marker))] | length')
-          echo "Completed auto-reviews for PR #${PR_NUMBER}: ${count}/${MAX_REVIEWS}"
-          if [ "${count}" -ge "${MAX_REVIEWS}" ]; then
+          # Count every review run for this PR branch, including the current one.
+          # The count is checked before the model step, so the cap also applies
+          # when earlier runs failed or were cancelled.
+          runs=$(gh api --paginate \
+            "repos/${GH_REPO}/actions/runs?event=pull_request&branch=${HEAD_REF}&per_page=100" \
+            | jq --arg wf "review.yml" -s \
+              '[.[] | .workflow_runs[] | select(.path == (".github/workflows/" + $wf))] | length')
+          echo "Review runs for ${HEAD_REF}: ${runs}/${MAX_RUNS} (including this run)"
+          if [ "${runs}" -gt "${MAX_RUNS}" ]; then
             echo "skip=true" >> "${GITHUB_OUTPUT}"
-            echo "Review budget exhausted; the model will not be called."
+            echo "Review run budget exhausted; the model will not be called."
           else
             echo "skip=false" >> "${GITHUB_OUTPUT}"
           fi
@@ -67,8 +72,8 @@ jobs:
                При необходимости прочитай окружающий код и ADR.
             3. Проверь разделы PR «Проверки», «Риск» и «Откат». Если они пустые
                или не соответствуют diff, это блокирующее замечание.
-            4. Начни комментарий строкой `<!-- opencode-auto-review -->`:
-               по этому маркеру workflow считает израсходованный лимит ревью.
+            4. Начни комментарий строкой `<!-- opencode-auto-review -->`: по
+               этому маркеру авторевью отличается от остальных комментариев.
             5. Формат: `## Авторевью`, затем `### Блокирующие` и
                `### Неблокирующие`. Для каждого замечания укажи `file:line`,
                суть и что исправить. Если замечаний нет, напиши это явно и

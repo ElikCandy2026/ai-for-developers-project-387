@@ -506,13 +506,17 @@ Workflow [`.github/workflows/review.yml`](.github/workflows/review.yml)
 | Пропуск | черновики и PR из форков не ревьюятся: у форков токен только на чтение |
 | Критерии | [`REVIEW.md`](REVIEW.md), подключён в `prompt` |
 | Модель | `opencode/deepseek-v4.1-flash-free` |
-| Права | `contents: read`, `pull-requests: write`, `issues: write` |
+| Права | `contents: read`, `pull-requests: write`, `issues: write`, `actions: read` |
 | Таймаут | `timeout-minutes: 30` |
 | Устаревшее ревью | `concurrency` по номеру PR с `cancel-in-progress: true`: новый коммит отменяет предыдущий прогон |
-| Лимит запусков | `MAX_REVIEWS: "3"` завершённых ревью на PR; проверка выполняется отдельным шагом до вызова модели, при исчерпании модель не запускается |
-| Учёт лимита | считаются комментарии с маркером `<!-- opencode-auto-review -->`; отменённые прогоны лимит не расходуют |
+| Лимит запусков | `MAX_RUNS: "5"` прогонов workflow на PR; проверка выполняется отдельным шагом до вызова модели, при превышении модель не запускается |
+| Учёт лимита | считаются все прогоны `review.yml` для ветки PR, включая текущий и отменённые, поэтому серия быстрых пушей не обходит лимит |
 | Шаблон PR | [`.github/pull_request_template.md`](.github/pull_request_template.md) с разделами «Проверки», «Риск» и «Откат» |
 | Где смотреть результат | комментарий в PR и прогон в [Actions](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/workflows/review.yml) |
+
+Комментарий авторевью начинается скрытым маркером
+`<!-- opencode-auto-review -->`, чтобы его было легко отличить от остальных
+сообщений в PR.
 
 PR, созданные от `GITHUB_TOKEN` (например, release-please), не запускают этот
 workflow: GitHub не шлёт события на действия такого токена.
