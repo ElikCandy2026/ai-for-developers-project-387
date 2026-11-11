@@ -15,13 +15,14 @@ vi.mock('./data/api', async (importOriginal) => {
     createBooking: vi.fn(),
     fetchAvailability: vi.fn(),
     fetchBootstrap: vi.fn(),
+    fetchUpcomingBookings: vi.fn(),
   };
 });
 
 const owner: Owner = {
-  id: 'owner_anna',
-  displayName: 'Анна Соколова',
-  email: 'anna.sokolova@callbook.local',
+  id: 'owner_pafnuty',
+  displayName: 'Пафнутий Евлампиевич',
+  email: 'pafnuty.evlampevich@callbook.local',
   rules: {
     timezone: 'Europe/Moscow',
     workingDays: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
@@ -99,6 +100,17 @@ const booking: Booking = {
   createdAt: '2026-11-10T00:00:00.000Z',
 };
 
+function mockLoadedApp() {
+  vi.mocked(api.fetchBootstrap).mockResolvedValue({
+    ok: true,
+    data: { owner, meetingTypes },
+  });
+  vi.mocked(api.fetchAvailability).mockImplementation(async (meetingTypeId) => {
+    const type = meetingTypes.find((item) => item.id === meetingTypeId) ?? introType;
+    return { ok: true, data: availabilityFor(type) };
+  });
+}
+
 describe('App guest page', () => {
   afterEach(() => {
     cleanup();
@@ -106,14 +118,7 @@ describe('App guest page', () => {
 
   beforeEach(() => {
     window.history.replaceState(null, '', '/');
-    vi.mocked(api.fetchBootstrap).mockResolvedValue({
-      ok: true,
-      data: { owner, meetingTypes },
-    });
-    vi.mocked(api.fetchAvailability).mockImplementation(async (meetingTypeId) => {
-      const type = meetingTypes.find((item) => item.id === meetingTypeId) ?? introType;
-      return { ok: true, data: availabilityFor(type) };
-    });
+    mockLoadedApp();
     vi.mocked(api.createBooking).mockResolvedValue({ ok: true, data: booking });
   });
 
@@ -163,5 +168,39 @@ describe('App guest page', () => {
       guestEmail: 'ivan@example.com',
       notes: undefined,
     });
+  });
+});
+
+describe('App owner identity', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  beforeEach(() => {
+    mockLoadedApp();
+    vi.mocked(api.fetchUpcomingBookings).mockResolvedValue({ ok: true, data: [] });
+  });
+
+  it('shows the owner name and initials on the guest page', async () => {
+    window.history.replaceState(null, '', '/');
+    render(<App />);
+
+    expect(await screen.findByText('ПЕ', { selector: '.header-avatar' })).toBeTruthy();
+    expect(screen.getByText('ПЕ', { selector: '.owner-avatar' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Пафнутий Евлампиевич' })).toBeTruthy();
+    expect(screen.queryByText('АС')).toBeNull();
+    expect(screen.queryByText('Анна Соколова')).toBeNull();
+  });
+
+  it('shows the same name and initials in the owner dashboard', async () => {
+    window.history.replaceState(null, '', '#owner');
+    render(<App />);
+
+    expect(await screen.findByText('ПЕ', { selector: '.owner-avatar.small' })).toBeTruthy();
+    expect(screen.getByText('ПЕ', { selector: '.header-avatar' })).toBeTruthy();
+    expect(screen.getByText('Пафнутий Евлампиевич')).toBeTruthy();
+    expect(screen.getByText('pafnuty.evlampevich@callbook.local')).toBeTruthy();
+    expect(screen.queryByText('АС')).toBeNull();
+    expect(screen.queryByText('Анна Соколова')).toBeNull();
   });
 });

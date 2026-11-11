@@ -42,6 +42,19 @@ export function formatDurationShort(minutes: number): string {
   return rest === 0 ? `${hours} ч` : `${hours} ч ${rest} мин`;
 }
 
+/**
+ * Owner initials for an avatar: the first letters of the first two non-empty
+ * name parts, upper-cased.
+ */
+export function ownerInitials(displayName: string): string {
+  return displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
+}
+
 /** Availability dates are owner-local calendar dates, so format them as UTC noon. */
 function localDateAsUtcNoon(date: string): Date {
   return new Date(`${date}T12:00:00Z`);

@@ -85,7 +85,9 @@ class BookingApiIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         Owner owner = response.getBody();
         assertThat(owner).isNotNull();
-        assertThat(owner.getDisplayName()).isNotBlank();
+        assertThat(owner.getId()).isEqualTo("owner_pafnuty");
+        assertThat(owner.getDisplayName()).isEqualTo("Пафнутий Евлампиевич");
+        assertThat(owner.getEmail()).isEqualTo("pafnuty.evlampevich@callbook.local");
         assertThat(owner.getRules().getTimezone()).isEqualTo("Europe/Moscow");
         assertThat(owner.getRules().getSlotStepMinutes()).isEqualTo(30);
         assertThat(owner.getRules().getBookingWindowDays()).isEqualTo(14);
