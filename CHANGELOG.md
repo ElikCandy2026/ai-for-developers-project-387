@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.1.1...v1.1.2) (2026-11-12)
+
+
+### Bug Fixes
+
+* enable gzip compression for static assets and JSON ([#23](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/23)) ([0647558](https://github.com/ElikCandy2026/ai-for-developers-project-387/commit/064755836cf43c8db8c59ccb3e0521c350d407f2))
+
 ## [1.1.1](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.1.0...v1.1.1) (2026-11-12)
 
 
