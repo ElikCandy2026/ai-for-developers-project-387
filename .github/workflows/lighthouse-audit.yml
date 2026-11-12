@@ -109,6 +109,9 @@ jobs:
             --output=json \
             --output-path="$REPORT_DIR/warmup" \
             --only-categories=performance
+          if [ -f "$REPORT_DIR/warmup" ]; then
+            mv "$REPORT_DIR/warmup" "$REPORT_DIR/warmup.report.json"
+          fi
           runs=1
           if [ "$MODE" = "baseline" ]; then
             runs=$BASELINE_RUNS

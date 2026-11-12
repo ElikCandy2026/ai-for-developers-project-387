@@ -569,6 +569,8 @@ Lighthouse. Агент читает отчёт, выбирает одну кон
 | `live` | [43153918170](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43153918170) | Успешно. Агент создал [#20](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/20) про `aria-allowed-role`: 14 кнопок дат с недопустимой ролью `listitem`, указаны `frontend/src/components/GuestBooking.tsx:310` и способ исправления. |
 | `training` | [43154329494](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43154329494) | Успешно. Агент создал учебную [#21](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/21) про LCP 5.2 s, с меткой `training` и предупреждением, что это не подтверждённый дефект. |
 | `training` повторно | [43154502330](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43154502330) | Успешно. Агент нашёл [#21](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/21), записал `duplicate #21`, не создал новую задачу и не добавил повторный комментарий. |
+| `baseline` без прогрева | [43170641433](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43170641433) | 5 прогонов. Первый — TBT 648 ms и main-thread 2.1 s, остальные — TBT 0 ms. Показал, что первый прогон после старта измеряет холодный JVM, а не установившееся состояние. |
+| `baseline` с прогревом | [43171216961](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43171216961) | 5 прогретых прогонов: Performance 93, TBT 0 ms, main-thread 672 ms, LCP 2.4 s. Это baseline для [#19](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/19). |
 
 Отчёт каждого прогона лежит в артефакте `lighthouse-report` (JSON и HTML,
 хранение 14 дней); итоги агента продублированы в журнале
@@ -593,8 +595,14 @@ Lighthouse. Агент читает отчёт, выбирает одну кон
   выводом агента, даже когда находок нет.
 - Бесплатная модель подходит для разбора отчёта, но отвечает не мгновенно;
   `timeout-minutes: 30` покрывает сборку, Lighthouse и работу агента с запасом.
-- Реальные находки #19 и #20 стоит взять в работу отдельно: это входящие
-  обращения, а не автоматически подтверждённые исправления.
+- Baseline показал, что первый прогон Lighthouse после старта приложения
+  завышает main-thread work и TBT: он конкурирует с прогревом Spring Boot.
+  Поэтому workflow делает прогревочный прогон и не учитывает его. После
+  прогрева Performance = 93, TBT = 0, main-thread work = 672 ms, а исходные
+  2.3 s из #19 не воспроизводятся.
+- #20 исправлен, а #19 после прогрева не воспроизводится. Оставшиеся
+  возможности — сжатие ([#23](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/23)),
+  неиспользуемый CSS и render-blocking — стоит брать отдельными задачами.
 
 ## Релизы
 
