@@ -100,6 +100,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$REPORT_DIR"
+          # The first Lighthouse pass runs while Spring Boot is still warming up
+          # (JIT, class loading) and competes with it for CPU. Discard a warm-up
+          # pass so the measured runs describe the steady state.
+          npx --yes lighthouse@12 "$AUDIT_URL" \
+            --quiet \
+            --chrome-flags="--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu" \
+            --output=json \
+            --output-path="$REPORT_DIR/warmup" \
+            --only-categories=performance
           runs=1
           if [ "$MODE" = "baseline" ]; then
             runs=$BASELINE_RUNS
@@ -191,6 +200,7 @@ jobs:
               '# Lighthouse baseline',
               '',
               f'- Прогонов: {len(runs)}',
+              '- Прогревочный прогон: 1 (исключён из метрик)',
               f'- Lighthouse: {runs[0].get("lighthouseVersion", "unknown")}',
               f'- Benchmark index: {runs[0].get("environment", {}).get("benchmarkIndex", "unknown")}',
               f'- URL: {runs[0].get("finalDisplayedUrl", runs[0].get("finalUrl", ""))}',
