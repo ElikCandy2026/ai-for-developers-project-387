@@ -1,0 +1,339 @@
+name: lighthouse-audit
+
+on:
+  schedule:
+    # GitHub Actions evaluates cron in UTC unless timezone is set. With the
+    # explicit timezone the audit runs at 03:17 Europe/Moscow, once per day.
+    - cron: '17 3 * * *'
+      timezone: Europe/Moscow
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Источник отчёта: реальный аудит или подготовленный учебный'
+        required: true
+        default: live
+        type: choice
+        options:
+          - live
+          - training
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: lighthouse-audit
+      cancel-in-progress: false
+    permissions:
+      # GITHUB_TOKEN mode (the CLI equivalent of use_github_token: true):
+      # the agent uses GH_TOKEN to search and create issues. No id-token is
+      # needed because no GitHub App token exchange is performed.
+      contents: read
+      issues: write
+    env:
+      MODE: ${{ inputs.mode || 'live' }}
+      REPORT_DIR: ${{ runner.temp }}/lighthouse
+      AUDIT_URL: http://127.0.0.1:8080/
+      ARTIFACT_NAME: lighthouse-report
+      AUDIT_LABEL: lighthouse-audit
+      TRAINING_LABEL: training
+      LOG_LABEL: lighthouse-log
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            contract/package-lock.json
+            frontend/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Install dependencies
+        if: env.MODE == 'live'
+        run: |
+          set -euo pipefail
+          cd contract && npm ci
+          cd ../frontend && npm ci
+
+      - name: Build application
+        if: env.MODE == 'live'
+        run: make build
+
+      - name: Start application
+        if: env.MODE == 'live'
+        run: |
+          set -euo pipefail
+          mkdir -p "$REPORT_DIR"
+          PORT=8080 \
+          DB_PATH="$REPORT_DIR/callbook.db" \
+          SEED_DEMO_DATA=true \
+          nohup java -jar backend/target/call-booking-1.0.0.jar \
+            > "$REPORT_DIR/app.log" 2>&1 &
+          echo "$!" > "$REPORT_DIR/app.pid"
+          for _ in $(seq 1 60); do
+            if curl -sf "${AUDIT_URL}api/owner" >/dev/null; then
+              echo "Application is up at ${AUDIT_URL}"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Application did not start in time" >&2
+          tail -100 "$REPORT_DIR/app.log" >&2 || true
+          exit 1
+
+      - name: Run Lighthouse
+        if: env.MODE == 'live'
+        run: |
+          set -euo pipefail
+          mkdir -p "$REPORT_DIR"
+          npx --yes lighthouse@12 "$AUDIT_URL" \
+            --quiet \
+            --chrome-flags="--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu" \
+            --output=json \
+            --output=html \
+            --output-path="$REPORT_DIR/report" \
+            --only-categories=performance,accessibility,best-practices,seo
+          # With two output formats Lighthouse appends the format to the base
+          # name. Normalise both files so later steps have stable paths.
+          json_report=$(find "$REPORT_DIR" -maxdepth 1 -name 'report*.json' | head -1)
+          html_report=$(find "$REPORT_DIR" -maxdepth 1 -name 'report*.html' | head -1)
+          test -n "$json_report"
+          test -n "$html_report"
+          cp "$json_report" "$REPORT_DIR/report.json"
+          cp "$html_report" "$REPORT_DIR/report.html"
+
+      - name: Prepare training report
+        if: env.MODE == 'training'
+        run: |
+          set -euo pipefail
+          mkdir -p "$REPORT_DIR"
+          jq -n --arg fetched_at "$(date -u +%FT%TZ)" '{
+            trainingFixture: true,
+            trainingNote: "Подготовленный учебный отчёт. Это не результат реального аудита приложения и не подтверждённый дефект.",
+            lighthouseVersion: "training-fixture",
+            fetchTime: $fetched_at,
+            requestedUrl: "http://127.0.0.1:8080/",
+            finalUrl: "http://127.0.0.1:8080/",
+            categories: {
+              performance: {id: "performance", title: "Performance", score: 0.38},
+              accessibility: {id: "accessibility", title: "Accessibility", score: 0.92},
+              "best-practices": {id: "best-practices", title: "Best Practices", score: 0.96},
+              seo: {id: "seo", title: "SEO", score: 0.90}
+            },
+            audits: {
+              "largest-contentful-paint": {
+                id: "largest-contentful-paint",
+                title: "Largest Contentful Paint",
+                description: "Largest Contentful Paint marks the time at which the largest text or image is painted.",
+                score: 0.21,
+                scoreDisplayMode: "numeric",
+                numericValue: 5200,
+                displayValue: "5.2 s",
+                details: {
+                  type: "opportunity",
+                  overallSavingsMs: 3400,
+                  items: [
+                    {
+                      node: {
+                        selector: "main .spotlight",
+                        snippet: "<aside class=\"spotlight\">"
+                      }
+                    }
+                  ]
+                }
+              },
+              "render-blocking-resources": {
+                id: "render-blocking-resources",
+                title: "Eliminate render-blocking resources",
+                score: 0.55,
+                scoreDisplayMode: "numeric",
+                displayValue: "Potential savings of 620 ms"
+              }
+            }
+          }' > "$REPORT_DIR/report.json"
+          cat > "$REPORT_DIR/report.html" <<'HTML'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>Учебный отчёт Lighthouse</title>
+          <h1>Учебный отчёт Lighthouse</h1>
+          <p><strong>Это подготовленный учебный отчёт, а не результат реального аудита.</strong></p>
+          <p>LCP: 5.2 s, performance: 38.</p>
+          HTML
+
+      - name: Summarize report
+        run: |
+          set -euo pipefail
+          jq -r '
+            "# Lighthouse: \(.finalUrl // .requestedUrl)\n\n" +
+            (if .trainingFixture then "> **Учебный отчёт.** Подготовленная находка, не подтверждённый дефект приложения.\n\n" else "" end) +
+            "| Категория | Оценка |\n| --- | --- |\n" +
+            ([.categories | to_entries[] |
+              "| \(.value.title) | \(if .value.score == null then "n/a" else ((.value.score * 100) | round | tostring) end) |"
+             ] | join("\n")) +
+            "\n\n## Находки\n\n" +
+            ([.audits | to_entries[] |
+              select(.value.score != null and .value.score < 1) |
+              select(.value.scoreDisplayMode == "binary" or .value.scoreDisplayMode == "numeric" or .value.scoreDisplayMode == "metricSavings") |
+              "- `\(.key)` — \(.value.title): \(.value.displayValue // (.value.score | tostring))"
+             ] | join("\n"))
+          ' "$REPORT_DIR/report.json" > "$REPORT_DIR/summary.md"
+          cat "$REPORT_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Ensure labels and audit log issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh label create "$AUDIT_LABEL" \
+            --description "Находка автоматического аудита Lighthouse" \
+            --color 0e8a16 --force >/dev/null
+          gh label create "$TRAINING_LABEL" \
+            --description "Учебная задача, не подтверждённый дефект" \
+            --color fbca04 --force >/dev/null
+          gh label create "$LOG_LABEL" \
+            --description "Журнал запусков аудита Lighthouse" \
+            --color 1d76db --force >/dev/null
+          log_issue=$(gh issue list --state open --label "$LOG_LABEL" \
+            --json number --jq '.[0].number // empty')
+          if [ -z "$log_issue" ]; then
+            gh issue create \
+              --title "Lighthouse: журнал аудитов" \
+              --label "$LOG_LABEL" \
+              --body "Журнал автоматических аудитов Lighthouse. Агент пишет сюда итог каждого прогона: находка или её отсутствие. Issue не закрывать." \
+              >/dev/null
+            log_issue=$(gh issue list --state open --label "$LOG_LABEL" \
+              --json number --jq '.[0].number')
+          fi
+          echo "AUDIT_LOG_ISSUE=$log_issue" >> "$GITHUB_ENV"
+
+      - name: Build agent prompt
+        run: |
+          set -euo pipefail
+          cat > "$REPORT_DIR/prompt.md" <<EOF
+          Ты — агент автоматического аудита Lighthouse в репозитории Callbook.
+          Не меняй код, не создавай коммиты, ветки и pull request. Работай только
+          с GitHub issues.
+
+          Контекст прогона:
+          - Режим: ${MODE}
+          - Страница: ${AUDIT_URL}
+          - Прогон: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          - Коммит: ${GITHUB_SHA}
+          - Артефакт: ${ARTIFACT_NAME} (JSON и HTML, срок хранения ограничен)
+          - Отчёт: ${REPORT_DIR}/report.json
+          - Сводка: ${REPORT_DIR}/summary.md
+          - Журнал аудитов: issue #${AUDIT_LOG_ISSUE}
+
+          Порядок работы:
+          1. Прочитай report.json и summary.md. Если в отчёте trainingFixture=true,
+             это учебный отчёт: явно обозначь это в задаче.
+          2. Выбери ровно одну самую значимую конкретную находку. Нужны audit id,
+             значение и затронутая страница. Не создавай задачу на общий низкий
+             score без конкретной метрики или правила.
+          3. Найди дубли командой:
+             gh issue list --state open --label ${AUDIT_LABEL} --search "<audit id> in:title,body" --json number,title,url,labels
+             В режиме training дополнительно используй --label ${TRAINING_LABEL}.
+             В режиме live игнорируй задачи с меткой ${TRAINING_LABEL}.
+             Дубль — только задача про тот же audit id и ту же страницу/проблему.
+          4. Если дубль есть и новых сведений нет (та же метрика, тот же масштаб),
+             ничего не создавай и не комментируй. Запиши результат duplicate.
+          5. Если дубля нет, создай отдельный issue через gh issue create:
+             - заголовок: \`Lighthouse: <audit id> — <кратко>\`;
+               в режиме training начни с \`[Учебный аудит] \`;
+             - метки: ${AUDIT_LABEL}, в режиме training ещё ${TRAINING_LABEL};
+             - тело с разделами \`## Проблема\`, \`## Предлагаемое действие\`,
+               \`## Связь с отчётом\`: ссылка на прогон, имя артефакта, audit id,
+               значение, страница и коммит;
+             - в training добавь строку
+               \`> **Учебная задача.** Подготовленный учебный отчёт, не подтверждённый дефект приложения.\`
+             Многострочное тело передавай через --body-file, не через --body.
+          6. Если находок нет, добавь в журнал #${AUDIT_LOG_ISSUE} комментарий:
+             оценки категорий, вывод «Находок нет» и ссылку на прогон.
+          7. Если задача создана, добавь в журнал #${AUDIT_LOG_ISSUE} один короткий
+             комментарий: режим, оценка performance, ссылка на созданный issue и
+             прогон. При дубле комментарий в журнал не добавляй.
+          8. Запиши в ${REPORT_DIR}/agent-result.txt ровно одну строку:
+             \`created <url issue>\`, \`duplicate #<n>\`, \`no-findings\` или
+             \`error <кратко>\`.
+          9. В конце выведи короткий итог: \`ISSUE: <url>\`, \`DUPLICATE: #<n>\`,
+             \`NO_FINDINGS\` или \`ERROR: <кратко>\`, и одну строку с находкой.
+             Пиши по-русски.
+          EOF
+
+      - name: Run audit agent
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          NO_COLOR: '1'
+        run: |
+          set -euo pipefail
+          curl -fsSL https://opencode.ai/install | bash
+          export PATH="$HOME/.opencode/bin:$PATH"
+          opencode run \
+            --auto \
+            --model opencode/deepseek-v4.1-flash-free \
+            --title "Lighthouse ${MODE} ${GITHUB_RUN_ID}" \
+            "$(cat "$REPORT_DIR/prompt.md")" \
+            2>&1 | tee "$REPORT_DIR/agent-output.log"
+          sed -r 's/\x1B\[[0-9;]*[mK]//g' "$REPORT_DIR/agent-output.log" \
+            > "$REPORT_DIR/agent-output.md"
+          cat "$REPORT_DIR/agent-output.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify agent result
+        run: |
+          set -euo pipefail
+          result_file="$REPORT_DIR/agent-result.txt"
+          if [ ! -s "$result_file" ]; then
+            echo "Агент не записал результат в $result_file" >&2
+            exit 1
+          fi
+          result=$(head -1 "$result_file")
+          echo "Агент: $result"
+          case "$result" in
+            created\ *|duplicate\ \#*|no-findings|error\ *) ;;
+            *)
+              echo "Неизвестный результат агента: $result" >&2
+              exit 1
+              ;;
+          esac
+          if [[ "$result" == error* ]]; then
+            echo "Агент завершился с ошибкой: $result" >&2
+            exit 1
+          fi
+          if [[ "$result" == created\ * ]]; then
+            issue_url=${result#created }
+            gh issue view "$issue_url" --json number,title,url \
+              --jq '"Проверен issue #\(.number): \(.title) — \(.url)"'
+          fi
+
+      - name: Upload Lighthouse report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.REPORT_DIR }}/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Show application log on failure
+        if: failure() && env.MODE == 'live'
+        run: tail -100 "$REPORT_DIR/app.log" || true
+
+      - name: Stop application
+        if: always()
+        run: |
+          if [ -f "$REPORT_DIR/app.pid" ]; then
+            kill "$(cat "$REPORT_DIR/app.pid")" || true
+          fi
