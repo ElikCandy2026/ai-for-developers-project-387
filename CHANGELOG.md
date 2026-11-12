@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.1.0...v1.1.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* use a group role for the date rail ([#20](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/20)) ([9307f12](https://github.com/ElikCandy2026/ai-for-developers-project-387/commit/9307f12a7fdc5b5bd3db236cd95c054733219dda))
+
 ## [1.1.0](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.0.0...v1.1.0) (2026-11-11)
 
 
