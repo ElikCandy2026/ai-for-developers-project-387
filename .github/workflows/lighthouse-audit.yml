@@ -602,7 +602,7 @@ jobs:
               ])
               if mode == "regression":
                   body += (
-                      "> **Проверка аудита.** В режиме `regression` дефект воспроизведён "
+                      "\n> **Проверка аудита.** В режиме `regression` дефект воспроизведён "
                       "намеренно: приложение запущено без сжатия. Это подтверждает, что "
                       "аудит замечает повторное появление, и не означает регресс в `main`.\n"
                   )
@@ -634,6 +634,22 @@ jobs:
                       "--label", regression_label,
                   )
               created.append(url)
+
+          log_issue = os.environ.get("AUDIT_LOG_ISSUE")
+          if log_issue:
+              finding_list = ", ".join(f"`{audit_id}`" for audit_id, _, _ in recurrences)
+              journal = "\n".join([
+                  "### Повторное появление",
+                  "",
+                  f"- Режим: `{mode}`",
+                  f"- Находки: {finding_list}",
+                  f"- Задачи: {', '.join(created)}",
+                  f"- Прогон: {run_url}",
+              ])
+              journal_path = os.path.join(report_dir, "regression-journal.md")
+              with open(journal_path, "w", encoding="utf-8") as handle:
+                  handle.write(journal + "\n")
+              gh("issue", "comment", log_issue, "--body-file", journal_path)
 
           write_result("regression", issue=", ".join(created))
           PY
