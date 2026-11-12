@@ -208,14 +208,15 @@ jobs:
           log_issue=$(gh issue list --state open --label "$LOG_LABEL" \
             --json number --jq '.[0].number // empty')
           if [ -z "$log_issue" ]; then
-            gh issue create \
+            # Take the number from the created URL: listing by label right
+            # after creation can race with GitHub's label index.
+            log_url=$(gh issue create \
               --title "Lighthouse: журнал аудитов" \
               --label "$LOG_LABEL" \
-              --body "Журнал автоматических аудитов Lighthouse. Агент пишет сюда итог каждого прогона: находка или её отсутствие. Issue не закрывать." \
-              >/dev/null
-            log_issue=$(gh issue list --state open --label "$LOG_LABEL" \
-              --json number --jq '.[0].number')
+              --body "Журнал автоматических аудитов Lighthouse. Агент пишет сюда итог каждого прогона: находка или её отсутствие. Issue не закрывать.")
+            log_issue=${log_url##*/}
           fi
+          test -n "$log_issue"
           echo "AUDIT_LOG_ISSUE=$log_issue" >> "$GITHUB_ENV"
 
       - name: Build agent prompt
@@ -293,6 +294,9 @@ jobs:
           cat "$REPORT_DIR/agent-output.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify agent result
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           result_file="$REPORT_DIR/agent-result.txt"
