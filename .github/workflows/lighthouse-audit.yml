@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Источник отчёта: реальный аудит, подготовленный учебный или baseline'
+        description: 'Источник отчёта: реальный аудит, подготовленный учебный, baseline или повторное появление'
         required: true
         default: live
         type: choice
@@ -17,6 +17,15 @@ on:
           - live
           - training
           - baseline
+          - regression
+      target:
+        description: 'Где измерять: локальная сборка на чистой БД или развёрнутый стенд Render'
+        required: true
+        default: local
+        type: choice
+        options:
+          - local
+          - render
 
 jobs:
   audit:
@@ -33,18 +42,77 @@ jobs:
       issues: write
     env:
       MODE: ${{ inputs.mode || 'live' }}
+      TARGET: ${{ inputs.target || 'local' }}
+      # Public stand of this repository. Override with the RENDER_URL
+      # repository variable if the service is recreated.
+      RENDER_URL: ${{ vars.RENDER_URL || 'https://ai-for-developers-project-387-6sa3.onrender.com/' }}
       # Ignored by git, so audit reports never reach a commit.
       REPORT_DIR: ${{ github.workspace }}/lighthouse-report
-      AUDIT_URL: http://127.0.0.1:8080/
+      AUDIT_URL: ${{ (inputs.target || 'local') == 'render' && (vars.RENDER_URL || 'https://ai-for-developers-project-387-6sa3.onrender.com/') || 'http://127.0.0.1:8080/' }}
       ARTIFACT_NAME: lighthouse-report
       AUDIT_LABEL: lighthouse-audit
       TRAINING_LABEL: training
       LOG_LABEL: lighthouse-log
+      REGRESSION_LABEL: lighthouse-regression
+      # Registry of previously fixed findings: audit id -> issue, fix PR/commit.
+      # A registered audit that fails again is a recurrence, not a new finding.
+      REGRESSION_REGISTRY: ${{ github.workspace }}/.github/lighthouse-fixed-audits.json
+      # regression mode reproduces this fixed finding by starting the app with
+      # compression disabled. The audit must detect it and link the fix.
+      REGRESSION_AUDIT_ID: uses-text-compression
       # Baseline mode repeats Lighthouse to smooth out runner noise.
       BASELINE_RUNS: '5'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Validate target
+        run: |
+          set -euo pipefail
+          # Normalise the base URL so "${AUDIT_URL}api/owner" always works,
+          # even when RENDER_URL is set without a trailing slash.
+          echo "AUDIT_URL=${AUDIT_URL%/}/" >> "$GITHUB_ENV"
+          echo "mode=${MODE} target=${TARGET} url=${AUDIT_URL%/}/"
+          if [ "$MODE" = "regression" ] && [ "$TARGET" != "local" ]; then
+            echo "::error::Режим regression требует target=local: дефект воспроизводится отключением сжатия в локальной сборке."
+            exit 1
+          fi
+
+      # Labels and the audit log issue are created before the build so a later
+      # failure (for example, the app did not start) can still be recorded as
+      # "no data" instead of disappearing with the failed job.
+      - name: Ensure labels and audit log issue
+        if: env.MODE != 'baseline'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh label create "$AUDIT_LABEL" \
+            --description "Находка автоматического аудита Lighthouse" \
+            --color 0e8a16 --force >/dev/null
+          gh label create "$TRAINING_LABEL" \
+            --description "Учебная задача, не подтверждённый дефект" \
+            --color fbca04 --force >/dev/null
+          gh label create "$REGRESSION_LABEL" \
+            --description "Повторное появление ранее исправленной находки" \
+            --color b60205 --force >/dev/null
+          gh label create "$LOG_LABEL" \
+            --description "Журнал запусков аудита Lighthouse" \
+            --color 1d76db --force >/dev/null
+          log_issue=$(gh issue list --state open --label "$LOG_LABEL" \
+            --json number --jq '.[0].number // empty')
+          if [ -z "$log_issue" ]; then
+            # Take the number from the created URL: listing by label right
+            # after creation can race with GitHub's label index.
+            log_url=$(gh issue create \
+              --title "Lighthouse: журнал аудитов" \
+              --label "$LOG_LABEL" \
+              --body "Журнал автоматических аудитов Lighthouse. Агент пишет сюда итог каждого прогона: находка, её отсутствие или отсутствие данных. Issue не закрывать.")
+            log_issue=${log_url##*/}
+          fi
+          test -n "$log_issue"
+          echo "AUDIT_LOG_ISSUE=$log_issue" >> "$GITHUB_ENV"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -63,36 +131,93 @@ jobs:
           cache: maven
 
       - name: Install dependencies
-        if: env.MODE != 'training'
+        if: env.MODE != 'training' && env.TARGET == 'local'
         run: |
           set -euo pipefail
           cd contract && npm ci
           cd ../frontend && npm ci
 
       - name: Build application
-        if: env.MODE != 'training'
+        if: env.MODE != 'training' && env.TARGET == 'local'
         run: make build
 
       - name: Start application
-        if: env.MODE != 'training'
+        if: env.MODE != 'training' && env.TARGET == 'local'
         run: |
           set -euo pipefail
           mkdir -p "$REPORT_DIR"
+          # regression mode deliberately reintroduces the gzip defect fixed in
+          # #23 by disabling the compression that the fix enabled. The audit
+          # must notice the recurrence and link the fixing PR and the issue.
+          compression=true
+          if [ "$MODE" = "regression" ]; then
+            compression=false
+          fi
           PORT=8080 \
           DB_PATH="$REPORT_DIR/callbook.db" \
           SEED_DEMO_DATA=true \
+          SERVER_COMPRESSION_ENABLED="$compression" \
           nohup java -jar backend/target/call-booking-1.0.0.jar \
             > "$REPORT_DIR/app.log" 2>&1 &
           echo "$!" > "$REPORT_DIR/app.pid"
           for _ in $(seq 1 60); do
             if curl -sf "${AUDIT_URL}api/owner" >/dev/null; then
-              echo "Application is up at ${AUDIT_URL}"
+              echo "Application is up at ${AUDIT_URL} (compression=${compression})"
               exit 0
             fi
             sleep 2
           done
+          reason="приложение не ответило на ${AUDIT_URL}api/owner за 120 с"
+          echo "no-data: ${reason}" > "$REPORT_DIR/no-data.txt"
+          echo "NO_DATA_REASON=${reason}" >> "$GITHUB_ENV"
           echo "Application did not start in time" >&2
           tail -100 "$REPORT_DIR/app.log" >&2 || true
+          exit 1
+
+      - name: Verify regression fixture
+        if: env.MODE == 'regression'
+        run: |
+          set -euo pipefail
+          # A regression run is only meaningful if the defect is really back.
+          # If compression is still enabled, the run proves nothing about the
+          # audit and must be recorded as missing data, not as "fixed".
+          asset=$(curl -sf "$AUDIT_URL" | grep -oE '/assets/[^"]+\.js' | head -1)
+          if [ -z "$asset" ]; then
+            reason="не удалось найти JS-ассет на главной странице"
+          else
+            headers=$(curl -sS -D - -o /dev/null -H 'Accept-Encoding: gzip' \
+              "${AUDIT_URL%/}${asset}")
+            if printf '%s' "$headers" | grep -qi '^content-encoding: gzip'; then
+              reason="сжатие всё ещё включено для ${asset}; дефект не воспроизведён"
+            else
+              echo "Compression is disabled for ${asset}; the #23 defect is reproduced."
+              exit 0
+            fi
+          fi
+          echo "no-data: ${reason}" > "$REPORT_DIR/no-data.txt"
+          echo "NO_DATA_REASON=${reason}" >> "$GITHUB_ENV"
+          echo "$reason" >&2
+          exit 1
+
+      - name: Wait for Render
+        if: env.TARGET == 'render' && env.MODE != 'training'
+        run: |
+          set -euo pipefail
+          mkdir -p "$REPORT_DIR"
+          # On the free plan the instance sleeps after idle and the first
+          # request can take up to a minute. An unavailable stand is missing
+          # data, not a clean report: it does not prove that a fix holds.
+          for _ in $(seq 1 60); do
+            if curl -sf "${AUDIT_URL}api/owner" >/dev/null; then
+              echo "Render is up at ${AUDIT_URL}"
+              exit 0
+            fi
+            sleep 3
+          done
+          reason="стенд Render ${AUDIT_URL} недоступен: /api/owner не ответил за 180 с"
+          echo "no-data: ${reason}" > "$REPORT_DIR/no-data.txt"
+          echo "NO_DATA_REASON=${reason}" >> "$GITHUB_ENV"
+          echo "$reason" >&2
           exit 1
 
       - name: Run Lighthouse
@@ -100,6 +225,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$REPORT_DIR"
+          trap 'reason="Lighthouse не снял отчёт"; echo "no-data: ${reason}" > "$REPORT_DIR/no-data.txt"; echo "NO_DATA_REASON=${reason}" >> "$GITHUB_ENV"' ERR
           # The first Lighthouse pass runs while Spring Boot is still warming up
           # (JIT, class loading) and competes with it for CPU. Discard a warm-up
           # pass so the measured runs describe the steady state.
@@ -315,38 +441,219 @@ jobs:
           ' "$REPORT_DIR/report.json" > "$REPORT_DIR/summary.md"
           cat "$REPORT_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Ensure labels and audit log issue
-        if: env.MODE != 'baseline'
+      # Registered findings are checked without the model: a recurrence must
+      # always be linked to the issue and the PR/commit that fixed it, even
+      # when the agent is unavailable. Unregistered findings still go to the
+      # agent below.
+      - name: Check registered regressions
+        if: env.MODE != 'training' && env.MODE != 'baseline'
+        id: regression
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          gh label create "$AUDIT_LABEL" \
-            --description "Находка автоматического аудита Lighthouse" \
-            --color 0e8a16 --force >/dev/null
-          gh label create "$TRAINING_LABEL" \
-            --description "Учебная задача, не подтверждённый дефект" \
-            --color fbca04 --force >/dev/null
-          gh label create "$LOG_LABEL" \
-            --description "Журнал запусков аудита Lighthouse" \
-            --color 1d76db --force >/dev/null
-          log_issue=$(gh issue list --state open --label "$LOG_LABEL" \
-            --json number --jq '.[0].number // empty')
-          if [ -z "$log_issue" ]; then
-            # Take the number from the created URL: listing by label right
-            # after creation can race with GitHub's label index.
-            log_url=$(gh issue create \
-              --title "Lighthouse: журнал аудитов" \
-              --label "$LOG_LABEL" \
-              --body "Журнал автоматических аудитов Lighthouse. Агент пишет сюда итог каждого прогона: находка или её отсутствие. Issue не закрывать.")
-            log_issue=${log_url##*/}
+          mkdir -p "$REPORT_DIR"
+          python3 - "$REPORT_DIR" "$REGRESSION_REGISTRY" <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+
+          report_dir, registry_path = sys.argv[1], sys.argv[2]
+          mode = os.environ.get("MODE", "live")
+          repo = os.environ["GH_REPO"]
+          run_url = (
+              f"{os.environ['GITHUB_SERVER_URL']}/{repo}/actions/runs/"
+              f"{os.environ['GITHUB_RUN_ID']}"
+          )
+          audit_label = os.environ["AUDIT_LABEL"]
+          regression_label = os.environ["REGRESSION_LABEL"]
+          expected = os.environ.get("REGRESSION_AUDIT_ID", "")
+
+          def gh(*args):
+              return subprocess.run(
+                  ["gh", *args], check=True, text=True, capture_output=True
+              ).stdout.strip()
+
+          def write_result(result, reason="", issue=""):
+              with open(os.path.join(report_dir, "regression-result.txt"), "w", encoding="utf-8") as handle:
+                  handle.write(result + (" " + reason if reason else "") + "\n")
+              outputs = {
+                  "skip_agent": "true" if result != "none" else "false",
+                  "no_data": "true" if result == "no-data" else "false",
+                  "failed": "true" if result == "error" else "false",
+                  "issue": issue,
+                  "reason": reason,
+              }
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+                  for key, value in outputs.items():
+                      handle.write(f"{key}={value}\n")
+              if result == "no-data":
+                  with open(os.path.join(report_dir, "no-data.txt"), "w", encoding="utf-8") as handle:
+                      handle.write(f"no-data: {reason}\n")
+                  with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as handle:
+                      handle.write(f"NO_DATA_REASON={reason}\n")
+              summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+              if summary_path:
+                  with open(summary_path, "a", encoding="utf-8") as handle:
+                      if result == "none":
+                          handle.write("\n### Повторное появление\n\nЗарегистрированных повторов нет.\n")
+                      elif result == "no-data":
+                          handle.write(f"\n### Повторное появление\n\n**Данных нет:** {reason}. Это не подтверждает, что дефект исправлен.\n")
+                      elif result == "regression":
+                          handle.write(f"\n### Повторное появление\n\nСоздана или обновлена задача: {issue}\n")
+                      else:
+                          handle.write(f"\n### Повторное появление\n\n**Ошибка проверки:** {reason}\n")
+
+          report_path = os.path.join(report_dir, "report.json")
+          try:
+              with open(report_path, encoding="utf-8") as handle:
+                  report = json.load(handle)
+          except FileNotFoundError:
+              write_result("no-data", "отчёт Lighthouse не создан")
+              sys.exit(0)
+          except (OSError, json.JSONDecodeError) as error:
+              write_result("no-data", f"отчёт Lighthouse не читается: {error}")
+              sys.exit(0)
+
+          if report.get("runtimeError"):
+              error = report["runtimeError"]
+              message = error.get("message") if isinstance(error, dict) else str(error)
+              write_result("no-data", f"Lighthouse вернул runtimeError: {message}")
+              sys.exit(0)
+          audits = report.get("audits") or {}
+          if not audits:
+              write_result("no-data", "в отчёте нет ни одного аудита")
+              sys.exit(0)
+          audited_url = (
+              report.get("finalDisplayedUrl")
+              or report.get("finalUrl")
+              or os.environ.get("AUDIT_URL", "")
+          )
+
+          try:
+              with open(registry_path, encoding="utf-8") as handle:
+                  registry = json.load(handle)
+          except (OSError, json.JSONDecodeError) as error:
+              write_result("error", f"реестр исправленных находок не читается: {error}")
+              sys.exit(0)
+
+          recurrences = []
+          for audit_id, entry in registry.items():
+              audit = audits.get(audit_id)
+              if not audit or audit.get("score") is None:
+                  continue
+              if audit.get("scoreDisplayMode") in ("notApplicable", "manual", "informational"):
+                  continue
+              if audit["score"] < 1:
+                  recurrences.append((audit_id, entry, audit))
+
+          if mode == "regression" and expected and not any(a == expected for a, _, _ in recurrences):
+              write_result(
+                  "no-data",
+                  f"режим regression не воспроизвёл {expected}; отсутствие находки здесь не подтверждает исправление",
+              )
+              sys.exit(0)
+
+          if not recurrences:
+              write_result("none")
+              sys.exit(0)
+
+          created = []
+          for audit_id, entry, audit in recurrences:
+              issue_number = entry["issue"]
+              fix_pr = entry.get("fixPr")
+              fix_commit = entry.get("fixCommit")
+              issue_url = f"https://github.com/{repo}/issues/{issue_number}"
+              fix_lines = [f"- Прежняя задача: #{issue_number} — {issue_url}"]
+              if fix_pr:
+                  fix_lines.append(f"- Исправляющий PR: #{fix_pr} — https://github.com/{repo}/pull/{fix_pr}")
+              if fix_commit:
+                  fix_lines.append(f"- Коммит исправления: https://github.com/{repo}/commit/{fix_commit}")
+              if not fix_pr and not fix_commit:
+                  fix_lines.append("- Исправляющий PR: не найден (в реестре нет ссылки)")
+              body = "\n".join([
+                  "## Повторное появление",
+                  "",
+                  f"Ранее исправленная находка `{audit_id}` снова воспроизводится на "
+                  f"{audited_url}.",
+                  "",
+                  *fix_lines,
+                  f"- Было после исправления: {entry.get('fixedValue', 'не зафиксировано')}",
+                  f"- Где было исправлено: {entry.get('page', 'не зафиксировано')}",
+                  f"- Сейчас: {audit.get('displayValue') or audit.get('score')} (score {audit.get('score')})",
+                  f"- Прогон: {run_url}",
+                  f"- Режим: `{mode}`",
+                  "",
+                  "## Предлагаемое действие",
+                  "",
+                  f"Проверить, не откатилось ли исправление из #{issue_number}, и повторить "
+                  "проверку после правки. Проблема считается исправленной только по данным "
+                  "нового прогона, а не по отсутствию задачи.",
+                  "",
+                  "## Связь с отчётом",
+                  "",
+                  f"- Audit id: `{audit_id}`",
+                  f"- Страница: {audited_url}",
+                  f"- Коммит: {os.environ.get('GITHUB_SHA', 'unknown')}",
+                  f"- Артефакт: {os.environ.get('ARTIFACT_NAME', 'lighthouse-report')}",
+                  "",
+              ])
+              if mode == "regression":
+                  body += (
+                      "> **Проверка аудита.** В режиме `regression` дефект воспроизведён "
+                      "намеренно: приложение запущено без сжатия. Это подтверждает, что "
+                      "аудит замечает повторное появление, и не означает регресс в `main`.\n"
+                  )
+              title = (
+                  f"Lighthouse: повторное появление {audit_id} — "
+                  f"{audit.get('title') or 'находка вернулась'}"
+              )
+              body_path = os.path.join(report_dir, f"regression-{audit_id}.md")
+              with open(body_path, "w", encoding="utf-8") as handle:
+                  handle.write(body)
+              existing = json.loads(
+                  gh(
+                      "issue", "list",
+                      "--state", "open",
+                      "--label", regression_label,
+                      "--search", f"{audit_id} in:title,body",
+                      "--json", "number,url",
+                  ) or "[]"
+              )
+              if existing:
+                  url = existing[0]["url"]
+                  gh("issue", "comment", str(existing[0]["number"]), "--body-file", body_path)
+              else:
+                  url = gh(
+                      "issue", "create",
+                      "--title", title,
+                      "--body-file", body_path,
+                      "--label", audit_label,
+                      "--label", regression_label,
+                  )
+              created.append(url)
+
+          write_result("regression", issue=", ".join(created))
+          PY
+
+      - name: Verify regression result
+        if: steps.regression.outputs.skip_agent == 'true'
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.regression.outputs.no_data }}" = "true" ]; then
+            echo "::error::Данных нет: ${{ steps.regression.outputs.reason }}. Это не подтверждает, что дефект исправлен."
+            exit 1
           fi
-          test -n "$log_issue"
-          echo "AUDIT_LOG_ISSUE=$log_issue" >> "$GITHUB_ENV"
+          if [ "${{ steps.regression.outputs.failed }}" = "true" ]; then
+            echo "::error::Проверка повторного появления не выполнена: ${{ steps.regression.outputs.reason }}"
+            exit 1
+          fi
+          echo "Повторное появление: ${{ steps.regression.outputs.issue }}"
 
       - name: Build agent prompt
-        if: env.MODE != 'baseline'
+        if: env.MODE != 'baseline' && steps.regression.outputs.skip_agent != 'true'
         run: |
           set -euo pipefail
           cat > "$REPORT_DIR/prompt.md" <<EOF
@@ -365,43 +672,63 @@ jobs:
           - Журнал аудитов: issue #${AUDIT_LOG_ISSUE}
 
           Порядок работы:
-          1. Прочитай report.json и summary.md. Если в отчёте trainingFixture=true,
-             это учебный отчёт: явно обозначь это в задаче.
-          2. Выбери ровно одну самую значимую конкретную находку. Нужны audit id,
+          1. Прочитай report.json и summary.md. Если отчёта нет, он пуст, содержит
+             runtimeError или в нём нет раздела audits, это отсутствие данных, а не
+             подтверждение исправления. Запиши \`no-data <причина>\`, не создавай
+             issue и не пиши, что дефект исправлен.
+          2. Если в отчёте trainingFixture=true, это учебный отчёт: явно обозначь
+             это в задаче.
+          3. Выбери ровно одну самую значимую конкретную находку. Нужны audit id,
              значение и затронутая страница. Не создавай задачу на общий низкий
              score без конкретной метрики или правила.
-          3. Найди дубли командой:
+          4. Найди дубли командой:
              gh issue list --state open --label ${AUDIT_LABEL} --search "<audit id> in:title,body" --json number,title,url,labels
              В режиме training дополнительно используй --label ${TRAINING_LABEL}.
              В режиме live игнорируй задачи с меткой ${TRAINING_LABEL}.
              Дубль — только задача про тот же audit id и ту же страницу/проблему.
-          4. Если дубль есть и новых сведений нет (та же метрика, тот же масштаб),
+          5. Отдельно проверь, не является ли находка повторным появлением уже
+             исправленной проблемы. Найди закрытые задачи:
+             gh issue list --state closed --label ${AUDIT_LABEL} --search "<audit id> in:title,body" --json number,title,url,closedAt
+             Если закрытая задача с тем же audit id есть, найди исправляющий PR:
+             gh pr list --state merged --search "<номер задачи> in:title,body" --json number,title,url
+             Если PR не найден, найди коммит:
+             git log --all --oneline --grep "#<номер задачи>"
+             В новом issue добавь раздел \`## Повторное появление\` со ссылками на
+             прежнюю задачу и исправляющий PR (или коммит, если PR не было), а
+             также строку о том, что именно было исправлено и какое значение было
+             после исправления. Добавь метку ${REGRESSION_LABEL}. Если ни PR, ни
+             коммит найти не удалось, так и напиши: отсутствие ссылки не отменяет
+             находку и не доказывает, что дефект исправлен.
+          6. Если дубль есть и новых сведений нет (та же метрика, тот же масштаб),
              ничего не создавай и не комментируй. Запиши результат duplicate.
-          5. Если дубля нет, создай отдельный issue через gh issue create:
+          7. Если дубля нет, создай отдельный issue через gh issue create:
              - заголовок: \`Lighthouse: <audit id> — <кратко>\`;
                в режиме training начни с \`[Учебный аудит] \`;
              - метки: ${AUDIT_LABEL}, в режиме training ещё ${TRAINING_LABEL};
+               при повторном появлении ещё ${REGRESSION_LABEL};
              - тело с разделами \`## Проблема\`, \`## Предлагаемое действие\`,
                \`## Связь с отчётом\`: ссылка на прогон, имя артефакта, audit id,
                значение, страница и коммит;
              - в training добавь строку
                \`> **Учебная задача.** Подготовленный учебный отчёт, не подтверждённый дефект приложения.\`
              Многострочное тело передавай через --body-file, не через --body.
-          6. Если находок нет, добавь в журнал #${AUDIT_LOG_ISSUE} комментарий:
-             оценки категорий, вывод «Находок нет» и ссылку на прогон.
-          7. Если задача создана, добавь в журнал #${AUDIT_LOG_ISSUE} один короткий
+          8. Если находок нет, добавь в журнал #${AUDIT_LOG_ISSUE} комментарий:
+             оценки категорий, вывод «Находок нет» и ссылку на прогон. Отсутствие
+             находки не доказывает, что ранее исправленный дефект исправлен: это
+             утверждение делается только по данным прогона.
+          9. Если задача создана, добавь в журнал #${AUDIT_LOG_ISSUE} один короткий
              комментарий: режим, оценка performance, ссылка на созданный issue и
              прогон. При дубле комментарий в журнал не добавляй.
-          8. Запиши в ${REPORT_DIR}/agent-result.txt ровно одну строку:
-             \`created <url issue>\`, \`duplicate #<n>\`, \`no-findings\` или
-             \`error <кратко>\`.
-          9. В конце выведи короткий итог: \`ISSUE: <url>\`, \`DUPLICATE: #<n>\`,
-             \`NO_FINDINGS\` или \`ERROR: <кратко>\`, и одну строку с находкой.
-             Пиши по-русски.
+          10. Запиши в ${REPORT_DIR}/agent-result.txt ровно одну строку:
+              \`created <url issue>\`, \`duplicate #<n>\`, \`no-findings\`,
+              \`no-data <причина>\` или \`error <кратко>\`.
+          11. В конце выведи короткий итог: \`ISSUE: <url>\`, \`DUPLICATE: #<n>\`,
+              \`NO_FINDINGS\`, \`NO_DATA: <причина>\` или \`ERROR: <кратко>\`, и
+              одну строку с находкой. Пиши по-русски.
           EOF
 
       - name: Run audit agent
-        if: env.MODE != 'baseline'
+        if: env.MODE != 'baseline' && steps.regression.outputs.skip_agent != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -411,18 +738,35 @@ jobs:
           set -euo pipefail
           curl -fsSL https://opencode.ai/install | bash
           export PATH="$HOME/.opencode/bin:$PATH"
-          opencode run \
+          # The free model can answer "Free usage limit reached" with a
+          # retry-after of many hours and keep retrying. Bound the call so a
+          # missing agent result is recorded as "no data" instead of hanging
+          # the job until the global timeout.
+          status=0
+          timeout --signal=TERM 600 opencode run \
             --auto \
             --model opencode/deepseek-v4.1-flash-free \
             --title "Lighthouse ${MODE} ${GITHUB_RUN_ID}" \
             "$(cat "$REPORT_DIR/prompt.md")" \
-            2>&1 | tee "$REPORT_DIR/agent-output.log"
+            2>&1 | tee "$REPORT_DIR/agent-output.log" || status=$?
           sed -r 's/\x1B\[[0-9;]*[mK]//g' "$REPORT_DIR/agent-output.log" \
             > "$REPORT_DIR/agent-output.md"
           cat "$REPORT_DIR/agent-output.md" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -ne 0 ]; then
+            if grep -qi "Free usage limit reached" "$REPORT_DIR/agent-output.log"; then
+              reason="лимит бесплатной модели исчерпан, отчёт не разобран"
+            elif [ "$status" -eq 124 ] || [ "$status" -eq 143 ]; then
+              reason="агент не разобрал отчёт за 10 минут"
+            else
+              reason="агент завершился с кодом ${status}, отчёт не разобран"
+            fi
+            echo "no-data: ${reason}" > "$REPORT_DIR/no-data.txt"
+            echo "NO_DATA_REASON=${reason}" >> "$GITHUB_ENV"
+            exit "$status"
+          fi
 
       - name: Verify agent result
-        if: env.MODE != 'baseline'
+        if: env.MODE != 'baseline' && steps.regression.outputs.skip_agent != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -430,18 +774,30 @@ jobs:
           set -euo pipefail
           result_file="$REPORT_DIR/agent-result.txt"
           if [ ! -s "$result_file" ]; then
-            echo "Агент не записал результат в $result_file" >&2
+            reason="агент не записал результат в ${result_file}"
+            echo "no-data: ${reason}" > "$REPORT_DIR/no-data.txt"
+            echo "NO_DATA_REASON=${reason}" >> "$GITHUB_ENV"
+            echo "$reason" >&2
             exit 1
           fi
           result=$(head -1 "$result_file")
           echo "Агент: $result"
           case "$result" in
-            created\ *|duplicate\ \#*|no-findings|error\ *) ;;
+            created\ *|duplicate\ \#*|no-findings|no-data\ *|error\ *) ;;
             *)
               echo "Неизвестный результат агента: $result" >&2
               exit 1
               ;;
           esac
+          if [[ "$result" == no-data* ]]; then
+            reason=${result#no-data}
+            reason=${reason# }
+            reason=${reason:-агент не получил данных из отчёта}
+            echo "no-data: ${reason}" > "$REPORT_DIR/no-data.txt"
+            echo "NO_DATA_REASON=${reason}" >> "$GITHUB_ENV"
+            echo "::error::Данных нет: ${reason}. Это не подтверждает, что дефект исправлен."
+            exit 1
+          fi
           if [[ "$result" == error* ]]; then
             echo "Агент завершился с ошибкой: $result" >&2
             exit 1
@@ -451,6 +807,42 @@ jobs:
             gh issue view "$issue_url" --json number,title,url \
               --jq '"Проверен issue #\(.number): \(.title) — \(.url)"'
           fi
+
+      - name: Record missing data
+        if: failure() && env.MODE != 'training' && env.MODE != 'baseline'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$REPORT_DIR"
+          if [ -f "$REPORT_DIR/no-data-commented" ]; then
+            echo "Отсутствие данных уже записано в журнал."
+            exit 0
+          fi
+          reason="${NO_DATA_REASON:-}"
+          if [ -z "$reason" ] && [ -f "$REPORT_DIR/no-data.txt" ]; then
+            reason=$(sed -n 's/^no-data: //p' "$REPORT_DIR/no-data.txt" | head -1)
+          fi
+          reason="${reason:-шаг аудита завершился с ошибкой до получения отчёта}"
+          log_issue="${AUDIT_LOG_ISSUE:-}"
+          if [ -z "$log_issue" ]; then
+            echo "Журнал аудитов не создан; причина отсутствия данных: ${reason}" >&2
+            exit 0
+          fi
+          body=$(mktemp)
+          cat > "$body" <<EOF
+          ### Данных нет
+
+          - Режим: \`${MODE}\`
+          - Причина: ${reason}
+          - Прогон: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          Это не подтверждает, что дефект исправлен: без отчёта аудит не может
+          отличить исправление от отсутствия данных.
+          EOF
+          gh issue comment "$log_issue" --body-file "$body"
+          touch "$REPORT_DIR/no-data-commented"
 
       - name: Upload Lighthouse report
         if: always()
@@ -462,7 +854,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Show application log on failure
-        if: failure() && env.MODE != 'training'
+        if: failure() && env.MODE != 'training' && env.TARGET == 'local'
         run: tail -100 "$REPORT_DIR/app.log" || true
 
       - name: Stop application

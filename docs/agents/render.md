@@ -2,14 +2,18 @@
 
 ## Публичный стенд
 
-<https://ai-for-developers-project-386-izjw.onrender.com>
+<https://ai-for-developers-project-387-6sa3.onrender.com>
 
-Сервис: `ai-for-developers-project-386` (`srv-dbom4gs9v7es73fn429g`), регион
-Frankfurt, free plan, runtime Docker. Render собирает образ по `./Dockerfile` из
-ветки `main`; пуш в `main` запускает автодеплой. `PORT` передаёт Render,
-приложение читает его из `server.port`, поэтому вручную задавать порт не нужно.
+Это основной стенд текущего репозитория. Стенд первого проекта
+(`https://ai-for-developers-project-386-izjw.onrender.com`) остаётся историческим
+примером и для проверок этого репозитория не используется.
 
-Dashboard: <https://dashboard.render.com/web/srv-dbom4gs9v7es73fn429g>
+Render собирает образ по `./Dockerfile` из ветки `main`; пуш в `main` запускает
+автодеплой. `PORT` передаёт Render, приложение читает его из `server.port`,
+поэтому вручную задавать порт не нужно. Адрес стенда продублирован в workflow
+`lighthouse-audit` как `RENDER_URL` с запасным значением; если сервис
+пересоздадут, достаточно задать repository variable `RENDER_URL`, не меняя
+workflow.
 
 ## Данные
 
@@ -41,7 +45,7 @@ opencode
 ## Проверка после деплоя
 
 ```bash
-BASE=https://ai-for-developers-project-386-izjw.onrender.com
+BASE=https://ai-for-developers-project-387-6sa3.onrender.com
 
 curl -fsS "$BASE/api/owner"
 curl -fsS "$BASE/api/meeting-types"
@@ -58,3 +62,12 @@ curl -fsS "$BASE/"
 6. `POST /api/meeting-types` → `201`, новый тип появляется в списке.
 
 Первый запрос к бесплатному инстансу после простоя может занять до минуты.
+
+## Аудит Lighthouse по стенду
+
+Ручной запуск `lighthouse-audit` с `target: render` измеряет этот стенд, а не
+локальную сборку. Перед Lighthouse workflow ждёт `/api/owner` до 180 секунд:
+бесплатный инстанс просыпается после простоя. Если стенд не ответил, запуск
+пишет в журнал аудитов «Данных нет» с причиной и **не** считает это
+подтверждением исправления. Режим `regression` с `target: render` запрещён:
+дефект для проверки аудита воспроизводится только в локальной сборке.

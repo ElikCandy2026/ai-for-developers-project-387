@@ -1,0 +1,16 @@
+{
+  "uses-text-compression": {
+    "issue": 23,
+    "fixPr": 24,
+    "fixCommit": "064755836cf43c8db8c59ccb3e0521c350d407f2",
+    "fixedValue": "score 1, экономия на сжатии 0 KiB",
+    "page": "http://127.0.0.1:8080/"
+  },
+  "aria-allowed-role": {
+    "issue": 20,
+    "fixPr": 22,
+    "fixCommit": "9307f12a7fdc5b5bd3db236cd95c054733219dda",
+    "fixedValue": "score 1, 0 элементов с недопустимой ролью",
+    "page": "http://127.0.0.1:8080/"
+  }
+}
