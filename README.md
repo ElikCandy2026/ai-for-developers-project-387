@@ -617,6 +617,8 @@ audit снова получает score меньше 1, workflow:
 | `baseline` без прогрева | [43170641433](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43170641433) | 5 прогонов. Первый — TBT 648 ms и main-thread 2.1 s, остальные — TBT 0 ms. Показал, что первый прогон после старта измеряет холодный JVM, а не установившееся состояние. |
 | `baseline` с прогревом | [43171216961](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43171216961) | 5 прогретых прогонов: Performance 93, TBT 0 ms, main-thread 672 ms, LCP 2.4 s. Это baseline для [#19](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/19). |
 | `baseline` после сжатия | [43175203669](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43175203669) | 5 прогретых прогонов: Performance 98, TBT 0 ms, FCP 1.36 s, LCP 1.53 s, transfer 84 KiB, `uses-text-compression` = 1. |
+| `regression`, `target=local` | [43181808767](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43181808767) | Успешно. Приложение запущено без сжатия, аудит снова увидел `uses-text-compression` (194 KiB) и создал [#29](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/29) с разделом `## Повторное появление`: ссылки на [#23](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/23), [PR #24](https://github.com/ElikCandy2026/ai-for-developers-project-387/pull/24) и коммит `0647558`. Агент не вызывался. |
+| `live`, `target=render`, недоступный стенд | [43182094039](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43182094039) | Ожидаемо упал на `Wait for Render`: временно подставленный `RENDER_URL` не отвечал 180 с. В журнал [#18](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/18) добавлено «Данных нет» с причиной и оговоркой, что это не подтверждает исправление. |
 
 Отчёт каждого прогона лежит в артефакте `lighthouse-report` (JSON и HTML,
 хранение 14 дней); итоги агента продублированы в журнале
@@ -665,6 +667,11 @@ audit снова получает score меньше 1, workflow:
 - Стенд Render на free plan засыпает: перед аудитом workflow ждёт `/api/owner`
   до 180 секунд. Если стенд не проснулся, это отсутствие данных, а не чистое
   исправление.
+- `regression` подтвердил связку на практике: [#29](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/29)
+  ссылается на #23, PR #24 и коммит `0647558`. Проверка сработала без модели,
+  поэтому лимит бесплатного агента на неё не влияет.
+- Недоступный стенд дал именно «Данных нет» в журнале #18, а не «находок нет»:
+  отсутствие отчёта не позволяет утверждать, что дефект исправлен.
 
 ## Релизы
 
