@@ -571,6 +571,7 @@ Lighthouse. Агент читает отчёт, выбирает одну кон
 | `training` повторно | [43154502330](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43154502330) | Успешно. Агент нашёл [#21](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/21), записал `duplicate #21`, не создал новую задачу и не добавил повторный комментарий. |
 | `baseline` без прогрева | [43170641433](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43170641433) | 5 прогонов. Первый — TBT 648 ms и main-thread 2.1 s, остальные — TBT 0 ms. Показал, что первый прогон после старта измеряет холодный JVM, а не установившееся состояние. |
 | `baseline` с прогревом | [43171216961](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43171216961) | 5 прогретых прогонов: Performance 93, TBT 0 ms, main-thread 672 ms, LCP 2.4 s. Это baseline для [#19](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/19). |
+| `baseline` после сжатия | [43175203669](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43175203669) | 5 прогретых прогонов: Performance 98, TBT 0 ms, FCP 1.36 s, LCP 1.53 s, transfer 84 KiB, `uses-text-compression` = 1. |
 
 Отчёт каждого прогона лежит в артефакте `lighthouse-report` (JSON и HTML,
 хранение 14 дней); итоги агента продублированы в журнале
@@ -600,9 +601,12 @@ Lighthouse. Агент читает отчёт, выбирает одну кон
   Поэтому workflow делает прогревочный прогон и не учитывает его. После
   прогрева Performance = 93, TBT = 0, main-thread work = 672 ms, а исходные
   2.3 s из #19 не воспроизводятся.
-- #20 исправлен, а #19 после прогрева не воспроизводится. Оставшиеся
-  возможности — сжатие ([#23](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/23)),
-  неиспользуемый CSS и render-blocking — стоит брать отдельными задачами.
+- gzip для статики и JSON снизил transfer с 278 до 84 KiB, FCP с 2.26 до
+  1.36 s, LCP с 2.4 до 1.53 s, а Performance вырос с 93 до 98. Аудит
+  `uses-text-compression` теперь равен 1.
+- #20 и #23 исправлены, #19 после прогрева не воспроизводится. Unused CSS и
+  render-blocking отдельно не берём: на прогретом приложении они не создают
+  проблем.
 
 ## Релизы
 
