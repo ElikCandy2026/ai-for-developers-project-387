@@ -150,7 +150,7 @@ Render](#данные-на-render).
 │       └── lib/                  форматирование дат
 ├── Dockerfile                    многостадийная сборка образа
 ├── opencode.json                 безопасная MCP-конфигурация Render
-├── .github/workflows/            CI, opencode, release-please, hexlet-check
+├── .github/workflows/            CI, opencode, triage, review, lighthouse-audit, release-please
 ├── .nvmrc                        версия Node для генерации и сборки
 ├── docs/                         скриншоты и инструкции для агентов
 ├── Makefile
