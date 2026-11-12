@@ -9,13 +9,14 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Источник отчёта: реальный аудит или подготовленный учебный'
+        description: 'Источник отчёта: реальный аудит, подготовленный учебный или baseline'
         required: true
         default: live
         type: choice
         options:
           - live
           - training
+          - baseline
 
 jobs:
   audit:
@@ -39,6 +40,8 @@ jobs:
       AUDIT_LABEL: lighthouse-audit
       TRAINING_LABEL: training
       LOG_LABEL: lighthouse-log
+      # Baseline mode repeats Lighthouse to smooth out runner noise.
+      BASELINE_RUNS: '5'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -60,18 +63,18 @@ jobs:
           cache: maven
 
       - name: Install dependencies
-        if: env.MODE == 'live'
+        if: env.MODE != 'training'
         run: |
           set -euo pipefail
           cd contract && npm ci
           cd ../frontend && npm ci
 
       - name: Build application
-        if: env.MODE == 'live'
+        if: env.MODE != 'training'
         run: make build
 
       - name: Start application
-        if: env.MODE == 'live'
+        if: env.MODE != 'training'
         run: |
           set -euo pipefail
           mkdir -p "$REPORT_DIR"
@@ -93,25 +96,133 @@ jobs:
           exit 1
 
       - name: Run Lighthouse
-        if: env.MODE == 'live'
+        if: env.MODE != 'training'
         run: |
           set -euo pipefail
           mkdir -p "$REPORT_DIR"
-          npx --yes lighthouse@12 "$AUDIT_URL" \
-            --quiet \
-            --chrome-flags="--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu" \
-            --output=json \
-            --output=html \
-            --output-path="$REPORT_DIR/report" \
-            --only-categories=performance,accessibility,best-practices,seo
-          # With two output formats Lighthouse appends the format to the base
-          # name. Normalise both files so later steps have stable paths.
-          json_report=$(find "$REPORT_DIR" -maxdepth 1 -name 'report*.json' | head -1)
-          html_report=$(find "$REPORT_DIR" -maxdepth 1 -name 'report*.html' | head -1)
-          test -n "$json_report"
-          test -n "$html_report"
-          cp "$json_report" "$REPORT_DIR/report.json"
-          cp "$html_report" "$REPORT_DIR/report.html"
+          runs=1
+          if [ "$MODE" = "baseline" ]; then
+            runs=$BASELINE_RUNS
+          fi
+          for i in $(seq 1 "$runs"); do
+            if [ "$MODE" = "baseline" ]; then
+              output_base="$REPORT_DIR/run-$i"
+            else
+              output_base="$REPORT_DIR/report"
+            fi
+            npx --yes lighthouse@12 "$AUDIT_URL" \
+              --quiet \
+              --chrome-flags="--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu" \
+              --output=json \
+              --output=html \
+              --output-path="$output_base" \
+              --only-categories=performance,accessibility,best-practices,seo
+            if [ "$MODE" = "baseline" ]; then
+              test -f "$output_base.report.json"
+              test -f "$output_base.report.html"
+            fi
+          done
+          if [ "$MODE" = "baseline" ]; then
+            # Keep a stable pair of files for the artifact and manual review.
+            cp "$REPORT_DIR/run-1.report.json" "$REPORT_DIR/report.json"
+            cp "$REPORT_DIR/run-1.report.html" "$REPORT_DIR/report.html"
+          else
+            # With two output formats Lighthouse appends the format to the base
+            # name. Normalise both files so later steps have stable paths.
+            json_report=$(find "$REPORT_DIR" -maxdepth 1 -name 'report*.json' | head -1)
+            html_report=$(find "$REPORT_DIR" -maxdepth 1 -name 'report*.html' | head -1)
+            test -n "$json_report"
+            test -n "$html_report"
+            cp "$json_report" "$REPORT_DIR/report.json"
+            cp "$html_report" "$REPORT_DIR/report.html"
+          fi
+
+      - name: Summarize baseline
+        if: env.MODE == 'baseline'
+        run: |
+          set -euo pipefail
+          python3 - "$REPORT_DIR" <<'PY'
+          import glob
+          import json
+          import os
+          import statistics
+          import sys
+
+          report_dir = sys.argv[1]
+          paths = sorted(glob.glob(os.path.join(report_dir, 'run-*.report.json')))
+          runs = [json.load(open(path, encoding='utf-8')) for path in paths]
+          if not runs:
+              raise SystemExit('no baseline reports found')
+
+          def audit(run, audit_id):
+              return run['audits'].get(audit_id) or {}
+
+          def number(run, audit_id):
+              return audit(run, audit_id).get('numericValue', 0)
+
+          def savings(run, audit_id, key):
+              details = audit(run, audit_id).get('details') or {}
+              return details.get(key, 0)
+
+          metrics = [
+              ('Performance', lambda run: run['categories']['performance']['score'] * 100, ''),
+              ('Accessibility', lambda run: run['categories']['accessibility']['score'] * 100, ''),
+              ('FCP', lambda run: number(run, 'first-contentful-paint'), 'ms'),
+              ('LCP', lambda run: number(run, 'largest-contentful-paint'), 'ms'),
+              ('TBT', lambda run: number(run, 'total-blocking-time'), 'ms'),
+              ('Max potential FID', lambda run: number(run, 'max-potential-fid'), 'ms'),
+              ('Speed Index', lambda run: number(run, 'speed-index'), 'ms'),
+              ('TTI', lambda run: number(run, 'interactive'), 'ms'),
+              ('CLS', lambda run: number(run, 'cumulative-layout-shift'), ''),
+              ('Main-thread work', lambda run: number(run, 'mainthread-work-breakdown'), 'ms'),
+              ('Bootup time', lambda run: number(run, 'bootup-time'), 'ms'),
+              ('Unused JS', lambda run: savings(run, 'unused-javascript', 'overallSavingsBytes') / 1024, 'KiB'),
+              ('Unused CSS', lambda run: savings(run, 'unused-css-rules', 'overallSavingsBytes') / 1024, 'KiB'),
+              ('Render-blocking', lambda run: savings(run, 'render-blocking-resources', 'overallSavingsMs'), 'ms'),
+              ('Total transfer', lambda run: number(run, 'total-byte-weight') / 1024, 'KiB'),
+              ('Text compression savings', lambda run: savings(run, 'uses-text-compression', 'overallSavingsBytes') / 1024, 'KiB'),
+              ('Long tasks', lambda run: len((audit(run, 'long-tasks').get('details') or {}).get('items') or []), ''),
+          ]
+
+          def fmt(value):
+              return f'{value:.1f}' if isinstance(value, float) else str(value)
+
+          lines = [
+              '# Lighthouse baseline',
+              '',
+              f'- Прогонов: {len(runs)}',
+              f'- Lighthouse: {runs[0].get("lighthouseVersion", "unknown")}',
+              f'- Benchmark index: {runs[0].get("environment", {}).get("benchmarkIndex", "unknown")}',
+              f'- URL: {runs[0].get("finalDisplayedUrl", runs[0].get("finalUrl", ""))}',
+              f'- Время: {runs[0].get("fetchTime", "")} — {runs[-1].get("fetchTime", "")}',
+              '',
+              '| Метрика | ' + ' | '.join(f'run {i + 1}' for i in range(len(runs))) + ' | Медиана | Min | Max |',
+              '| --- | ' + ' | '.join('---:' for _ in runs) + ' | ---: | ---: | ---: |',
+          ]
+          for name, getter, unit in metrics:
+              values = [getter(run) for run in runs]
+              suffix = f' {unit}' if unit else ''
+              cells = ' | '.join(fmt(value) for value in values)
+              lines.append(
+                  f'| {name} | {cells} | {fmt(statistics.median(values))}{suffix} | '
+                  f'{fmt(min(values))}{suffix} | {fmt(max(values))}{suffix} |'
+              )
+
+          groups = {}
+          for run in runs:
+              items = (audit(run, 'mainthread-work-breakdown').get('details') or {}).get('items') or []
+              for item in items:
+                  groups.setdefault(item['groupLabel'], []).append(item['duration'])
+          lines.extend(['', '### Main-thread breakdown (медиана)', '', '| Группа | ms |', '| --- | ---: |'])
+          for label, values in sorted(groups.items(), key=lambda pair: -statistics.median(pair[1])):
+              lines.append(f'| {label} | {statistics.median(values):.1f} |')
+
+          summary = '\n'.join(lines) + '\n'
+          with open(os.path.join(report_dir, 'baseline-summary.md'), 'w', encoding='utf-8') as handle:
+              handle.write(summary)
+          print(summary)
+          PY
+          cat "$REPORT_DIR/baseline-summary.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare training report
         if: env.MODE == 'training'
@@ -172,6 +283,7 @@ jobs:
           HTML
 
       - name: Summarize report
+        if: env.MODE != 'baseline'
         run: |
           set -euo pipefail
           jq -r '
@@ -191,6 +303,7 @@ jobs:
           cat "$REPORT_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Ensure labels and audit log issue
+        if: env.MODE != 'baseline'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -220,6 +333,7 @@ jobs:
           echo "AUDIT_LOG_ISSUE=$log_issue" >> "$GITHUB_ENV"
 
       - name: Build agent prompt
+        if: env.MODE != 'baseline'
         run: |
           set -euo pipefail
           cat > "$REPORT_DIR/prompt.md" <<EOF
@@ -274,6 +388,7 @@ jobs:
           EOF
 
       - name: Run audit agent
+        if: env.MODE != 'baseline'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -294,6 +409,7 @@ jobs:
           cat "$REPORT_DIR/agent-output.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify agent result
+        if: env.MODE != 'baseline'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -333,7 +449,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Show application log on failure
-        if: failure() && env.MODE == 'live'
+        if: failure() && env.MODE != 'training'
         run: tail -100 "$REPORT_DIR/app.log" || true
 
       - name: Stop application

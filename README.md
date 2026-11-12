@@ -540,7 +540,8 @@ Lighthouse. Агент читает отчёт, выбирает одну кон
 | --- | --- |
 | События | `schedule` и `workflow_dispatch` в одном файле |
 | Расписание | `cron: '17 3 * * *'` с `timezone: Europe/Moscow` — один запуск в сутки в 03:17 по Москве |
-| Ручной запуск | `workflow_dispatch` с выбором `mode`: `live` — реальный аудит, `training` — подготовленный учебный отчёт |
+| Ручной запуск | `workflow_dispatch` с выбором `mode`: `live` — реальный аудит, `training` — подготовленный учебный отчёт, `baseline` — 5 прогонов Lighthouse без агента и создания issue |
+| Baseline | в режиме `baseline` отчёты пишутся в `lighthouse-report/run-1…run-5`, а медианы метрик и разбивка main-thread work попадают в summary прогона; это база для сравнения до/после оптимизаций |
 | Приложение | `make build`, затем `java -jar backend/target/call-booking-1.0.0.jar` на `127.0.0.1:8080` с чистой БД и `SEED_DEMO_DATA=true` |
 | Отчёт | `lighthouse-report/report.json` и `report.html` в корне рабочего дерева; артефакт `lighthouse-report` хранится 14 дней |
 | Отчёты в git | не попадают: каталог `lighthouse-report/` исключён в `.gitignore` и не коммитится |
