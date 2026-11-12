@@ -23,6 +23,10 @@ test('guest picks a meeting type and a slot, then books it', async ({ page, requ
   await typeCard.click();
   await expect(typeCard).toHaveAttribute('aria-pressed', 'true');
 
+  const dateRail = page.getByRole('group', { name: 'Даты окна записи' });
+  await expect(dateRail).toBeVisible();
+  await expect(dateRail.getByRole('button', { pressed: true })).toHaveCount(1);
+
   const firstSlot = page.getByRole('button', { name: /^\d{2}:\d{2}$/ }).first();
   await expect(firstSlot).toBeVisible();
   const slotTime = (await firstSlot.textContent())?.trim() ?? '';

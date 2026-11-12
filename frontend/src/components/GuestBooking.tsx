@@ -298,7 +298,7 @@ export function GuestBooking({ owner, meetingTypes, onOpenOwner }: GuestBookingP
 
           {selectedType && !loading && !error && availability && (
             <>
-              <div className="date-rail" role="list" aria-label="Даты окна записи">
+              <div className="date-rail" role="group" aria-label="Даты окна записи">
                 {availability.days.map((day) => {
                   const disabled = day.slots.length === 0;
                   const active = day.date === selectedDate;
@@ -307,7 +307,6 @@ export function GuestBooking({ owner, meetingTypes, onOpenOwner }: GuestBookingP
                     <button
                       key={day.date}
                       type="button"
-                      role="listitem"
                       className={`date-card ${active ? 'selected' : ''} ${disabled ? 'disabled' : ''}`}
                       onClick={() => setSelectedDate(day.date)}
                       disabled={disabled}

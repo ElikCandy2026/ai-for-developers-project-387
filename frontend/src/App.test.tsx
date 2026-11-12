@@ -142,6 +142,18 @@ describe('App guest page', () => {
     ).toBeTruthy();
   });
 
+  it('keeps the date rail as a labelled group of toggle buttons', async () => {
+    render(<App />);
+
+    const rail = await screen.findByRole('group', { name: 'Даты окна записи' });
+    expect(screen.queryByRole('list', { name: 'Даты окна записи' })).toBeNull();
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+
+    const dateButtons = within(rail).getAllByRole('button');
+    expect(dateButtons).toHaveLength(1);
+    await waitFor(() => expect(dateButtons[0].getAttribute('aria-pressed')).toBe('true'));
+  });
+
   it('leads from a slot to the booking form and confirms the booking', async () => {
     const user = userEvent.setup();
     render(<App />);
