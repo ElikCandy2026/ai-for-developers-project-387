@@ -26,8 +26,8 @@ backend/data/
 # Logs
 *.log
 
-# Lighthouse audit artifacts. The workflow writes them to $RUNNER_TEMP, but
-# ignore local copies so a manual run cannot accidentally commit a report.
+# Lighthouse audit artifacts. The workflow writes them here, but the directory
+# stays out of git so a run cannot accidentally commit a report.
 /lighthouse-report/
 
 # Local secrets

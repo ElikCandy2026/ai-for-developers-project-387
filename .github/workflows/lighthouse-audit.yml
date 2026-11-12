@@ -32,7 +32,8 @@ jobs:
       issues: write
     env:
       MODE: ${{ inputs.mode || 'live' }}
-      REPORT_DIR: ${{ runner.temp }}/lighthouse
+      # Ignored by git, so audit reports never reach a commit.
+      REPORT_DIR: ${{ github.workspace }}/lighthouse-report
       AUDIT_URL: http://127.0.0.1:8080/
       ARTIFACT_NAME: lighthouse-report
       AUDIT_LABEL: lighthouse-audit

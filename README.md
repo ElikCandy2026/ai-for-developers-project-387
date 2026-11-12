@@ -542,8 +542,8 @@ Lighthouse. Агент читает отчёт, выбирает одну кон
 | Расписание | `cron: '17 3 * * *'` с `timezone: Europe/Moscow` — один запуск в сутки в 03:17 по Москве |
 | Ручной запуск | `workflow_dispatch` с выбором `mode`: `live` — реальный аудит, `training` — подготовленный учебный отчёт |
 | Приложение | `make build`, затем `java -jar backend/target/call-booking-1.0.0.jar` на `127.0.0.1:8080` с чистой БД и `SEED_DEMO_DATA=true` |
-| Отчёт | `$RUNNER_TEMP/lighthouse/report.json` и `report.html`; артефакт `lighthouse-report` хранится 14 дней |
-| Отчёты в git | не попадают: каталог `$RUNNER_TEMP` находится вне рабочего дерева, локальные копии игнорируются `.gitignore` |
+| Отчёт | `lighthouse-report/report.json` и `report.html` в корне рабочего дерева; артефакт `lighthouse-report` хранится 14 дней |
+| Отчёты в git | не попадают: каталог `lighthouse-report/` исключён в `.gitignore` и не коммитится |
 | Агент | `opencode run --model opencode/deepseek-v4.1-flash-free`; CLI используется потому, что action `anomalyco/opencode/github` принимает только комментарии, а не `schedule` |
 | Права | `contents: read`, `issues: write`; `GITHUB_TOKEN` передаётся агенту как `GH_TOKEN` — это режим `use_github_token: true`, поэтому `id-token: write` не нужен |
 | Таймаут | `timeout-minutes: 30` |
