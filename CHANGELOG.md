@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.1.3...v1.2.0) (2026-11-12)
+
+
+### Features
+
+* link recurring Lighthouse findings to fixes ([#27](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/27)) ([4a9007e](https://github.com/ElikCandy2026/ai-for-developers-project-387/commit/4a9007efcabdbeedba75306ef4a54215531b8af4))
+
+
+### Bug Fixes
+
+* record regression runs in the audit journal ([#27](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/27)) ([a89a81e](https://github.com/ElikCandy2026/ai-for-developers-project-387/commit/a89a81e644ef63e565db9bbbda8076ba72c367c3))
+
 ## [1.1.3](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.1.2...v1.1.3) (2026-11-12)
 
 
