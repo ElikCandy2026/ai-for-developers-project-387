@@ -8,7 +8,8 @@ jobs:
   review:
     if: |
       github.event.pull_request.draft == false &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !startsWith(github.event.pull_request.head.ref, 'release-please--branches--')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:
@@ -56,6 +57,10 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # opencode/github@latest reads TOKEN, while its use_github_token
+          # input only exports USE_GITHUB_TOKEN. Pass the same token under
+          # both names so the action skips the actor permission check.
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           model: opencode/deepseek-v4.1-flash-free
           use_github_token: true
