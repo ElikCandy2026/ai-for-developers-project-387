@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.1](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.3.0...v1.3.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* retry triage with a working free model ([#33](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/33)) ([c4c5df8](https://github.com/ElikCandy2026/ai-for-developers-project-387/commit/c4c5df8ec21e5e0e20009302ed36df3199f339f8))
+* run triage through the opencode CLI ([#33](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/33)) ([0a37d67](https://github.com/ElikCandy2026/ai-for-developers-project-387/commit/0a37d67d2b5c71699556f28437317a9f2f83d8a8))
+
 ## [1.3.0](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.2.0...v1.3.0) (2026-11-13)
 
 
