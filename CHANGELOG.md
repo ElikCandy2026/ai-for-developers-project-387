@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.0](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.2.0...v1.3.0) (2026-11-13)
+
+
+### Features
+
+* vendor project skills for the Actions runner ([#30](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/30)) ([362c29f](https://github.com/ElikCandy2026/ai-for-developers-project-387/commit/362c29f0fa7663faf2a615c42c7b67ae55908ecf))
+
+
+### Bug Fixes
+
+* run the skills smoke test without an API key ([#30](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/30)) ([d08e93d](https://github.com/ElikCandy2026/ai-for-developers-project-387/commit/d08e93d88cd04b3e1948da1cfeb80ece762e8842))
+
 ## [1.2.0](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.1.3...v1.2.0) (2026-11-12)
 
 
