@@ -1,0 +1,136 @@
+name: skills-smoke
+
+# Proves that a clean runner has the project skills without a global install:
+# the files are vendored in .opencode/skills, and each requested skill is loaded
+# through the skill tool from that project copy.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.opencode/skills/**'
+      - '.github/workflows/skills-smoke.yml'
+
+jobs:
+  skills:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      MODEL: opencode/deepseek-v4.1-flash-free
+      # Pin the CLI so the smoke test does not change under the workflow.
+      OPENCODE_VERSION: '2.2.6'
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      OPENCODE_DISABLE_AUTOUPDATE: 'true'
+      REPORT_DIR: ${{ github.workspace }}/skills-report
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install OpenCode
+        run: |
+          set -euo pipefail
+          npm install --global "@opencode/cli@${OPENCODE_VERSION}"
+          opencode --version
+
+      - name: Verify vendored skill files
+        run: |
+          set -euo pipefail
+          mkdir -p "$REPORT_DIR"
+          missing=0
+          for skill in to-spec to-tickets implement-spec tdd code-review codebase-design; do
+            file=".opencode/skills/${skill}/SKILL.md"
+            if [ ! -f "$file" ]; then
+              echo "::error::Missing ${file}"
+              missing=1
+              continue
+            fi
+            for field in name description; do
+              if ! sed -n '1,20p' "$file" | grep -q "^${field}:"; then
+                echo "::error::${file} has no ${field} frontmatter field"
+                missing=1
+              fi
+            done
+            echo "${skill}: $(sed -n '1,20p' "$file" | grep -m1 '^name:' | sed 's/^name: *//')"
+          done
+          exit "$missing"
+
+      # The action and the CLI both run from the repository root, so the
+      # explicit source in opencode.json and the automatic .opencode/skills
+      # discovery point at the same vendored directory.
+      - name: Show configuration sources
+        run: |
+          set -euo pipefail
+          # Keep the resolved config out of the uploaded artifact: it can contain
+          # provider headers even when secrets are masked in the log.
+          config_file="$RUNNER_TEMP/opencode-config.json"
+          opencode debug config > "$config_file"
+          jq -e '.[] | select(.type == "document" and (.info.skills // [] | index(".opencode/skills")))' \
+            "$config_file" >/dev/null
+          echo "opencode.json registers .opencode/skills"
+
+      - name: Load each skill through the skill tool
+        # Fork PRs do not receive the model secret. The file and config checks
+        # above still run there; the invocation runs for dispatch and same-repo
+        # PRs, where the secret is available.
+        if: env.OPENCODE_API_KEY != ''
+        run: |
+          set -euo pipefail
+          printf '| Skill | Skill tool call | Loaded from project |\n| --- | --- | --- |\n' > "$REPORT_DIR/summary.md"
+          failed=0
+          for skill in to-spec to-tickets implement-spec; do
+            jsonl="$REPORT_DIR/${skill}.jsonl"
+            err="$REPORT_DIR/${skill}.err"
+            if ! opencode run --standalone --format json --auto --model "$MODEL" \
+              "Load the @${skill} skill with the skill tool. Do not publish anything, do not create issues, and do not modify files. After it loads, reply with the skill's first heading and the word LOADED." \
+              > "$jsonl" 2> "$err"; then
+              echo "::error::opencode run failed for ${skill}; see ${skill}.err"
+              failed=1
+              printf '| `%s` | run failed | - |\n' "$skill" >> "$REPORT_DIR/summary.md"
+              continue
+            fi
+
+            if ! jq -e --arg id "$skill" \
+              'select(.type == "tool_use" and .part.tool == "skill" and .part.state.input.id == $id)' \
+              "$jsonl" >/dev/null; then
+              echo "::error::${skill} was not loaded through the skill tool"
+              failed=1
+              printf '| `%s` | missing | - |\n' "$skill" >> "$REPORT_DIR/summary.md"
+              continue
+            fi
+
+            loaded_dir=$(jq -r --arg id "$skill" \
+              'select(.type == "tool_use" and .part.tool == "skill" and .part.state.input.id == $id) | .part.state.output' \
+              "$jsonl" | sed -n 's/^Base directory for this skill: //p' | head -1)
+            expected="$GITHUB_WORKSPACE/.opencode/skills/${skill}"
+            if [ "$loaded_dir" != "$expected" ]; then
+              echo "::error::${skill} loaded from '${loaded_dir}', expected '${expected}'"
+              failed=1
+              printf '| `%s` | yes | `%s` (wrong) |\n' "$skill" "$loaded_dir" >> "$REPORT_DIR/summary.md"
+              continue
+            fi
+
+            echo "${skill}: loaded from ${loaded_dir}"
+            printf '| `%s` | yes | `%s` |\n' "$skill" "$loaded_dir" >> "$REPORT_DIR/summary.md"
+          done
+          cat "$REPORT_DIR/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          exit "$failed"
+
+      - name: Note skipped invocation
+        if: env.OPENCODE_API_KEY == ''
+        run: |
+          echo "::warning::OPENCODE_API_KEY is not available (fork PR); only file and config checks ran."
+          echo "Invocation skipped: no model secret on this event." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skills-smoke
+          path: ${{ env.REPORT_DIR }}
+          if-no-files-found: warn

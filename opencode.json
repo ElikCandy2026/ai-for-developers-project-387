@@ -1,5 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "skills": [".opencode/skills"],
   "mcp": {
     "servers": {
       "render": {

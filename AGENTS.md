@@ -30,6 +30,15 @@ stale relative to the contract.
 
 ## Agent skills
 
+### Project skills
+
+`to-spec`, `to-tickets` and `implement-spec` are vendored in
+[`.opencode/skills/`](.opencode/skills/) so a clean GitHub Actions runner has
+them without a global install. `tdd`, `code-review` and `codebase-design` are
+vendored because `implement-spec` calls them. See
+[`.opencode/skills/README.md`](.opencode/skills/README.md) for the source commit
+and the update procedure. Do not edit a vendored `SKILL.md` in place.
+
 ### Issue tracker
 
 Issues live in GitHub Issues at `ElikCandy2026/ai-for-developers-project-387`. See `docs/agents/issue-tracker.md`.

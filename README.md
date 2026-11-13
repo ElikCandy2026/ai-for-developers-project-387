@@ -478,6 +478,41 @@ OpenCode по команде в комментарии.
 использует `GITHUB_TOKEN` (`use_github_token: true`), поэтому отдельное приложение
 OpenCode устанавливать не нужно.
 
+### Проектные skills
+
+Чистый runner GitHub Actions не имеет глобальных skills, поэтому нужные навыки
+лежат в репозитории: [`.opencode/skills/`](.opencode/skills/). Они скопированы из
+[`mattpocock/skills`](https://github.com/mattpocock/skills) на коммите
+`5863806` (MIT) и обновляются вручную по инструкции в
+[`.opencode/skills/README.md`](.opencode/skills/README.md).
+
+| Skill | Назначение |
+| --- | --- |
+| `to-spec` | превратить обсуждение в спецификацию и опубликовать её как issue |
+| `to-tickets` | разбить спецификацию на tracer-bullet тикеты с блокировками |
+| `implement-spec` | реализовать спецификацию по тикетам на integration-ветке |
+| `tdd` | red-green цикл; вызывается из `implement-spec` |
+| `code-review` | ревью изменений по стандартам и спецификации; вызывается из `implement-spec` |
+| `codebase-design` | словарь глубоких модулей и швов; справочник для `tdd` |
+
+Три основных навыка помечены `disable-model-invocation: true`: модель не видит их
+в списке и не вызовет случайно. Чтобы загрузить навык, укажите его явно:
+
+```text
+/oc @to-spec собери спецификацию из этого обсуждения
+/oc @to-tickets #N разбей спецификацию на тикеты
+/oc @implement-spec #N реализуй спецификацию по тикетам
+```
+
+Перед вызовом модели `opencode.yml` проверяет, что все шесть `SKILL.md` на месте.
+Workflow [`skills-smoke.yml`](.github/workflows/skills-smoke.yml) дополнительно
+запускается вручную и на PR, меняющие skills: он проверяет frontmatter и источник
+`.opencode/skills` в конфиге, а затем загружает `to-spec`, `to-tickets` и
+`implement-spec` через инструмент `skill` и убеждается, что загружен именно
+проектный экземпляр. Отчёт и JSON-логи прогона сохраняются в артефакте
+`skills-smoke`. В PR из форков секрет модели недоступен, поэтому там выполняются
+только проверки файлов и конфига.
+
 ### Автотриаж новых issues
 
 Workflow [`.github/workflows/triage.yml`](.github/workflows/triage.yml)

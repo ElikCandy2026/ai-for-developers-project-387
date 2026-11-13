@@ -30,6 +30,9 @@ backend/data/
 # stays out of git so a run cannot accidentally commit a report.
 /lighthouse-report/
 
+# Skills smoke-test artifacts, written by skills-smoke.yml.
+/skills-report/
+
 # Local secrets
 .env
 .env.*

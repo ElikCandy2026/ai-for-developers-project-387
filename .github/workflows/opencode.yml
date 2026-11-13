@@ -37,6 +37,21 @@ jobs:
         with:
           fetch-depth: 1
 
+      # The runner starts with no global skills. The project skills are vendored
+      # in .opencode/skills, so fail before the model runs if one is missing.
+      - name: Verify project skills
+        run: |
+          set -euo pipefail
+          missing=0
+          for skill in to-spec to-tickets implement-spec tdd code-review codebase-design; do
+            file=".opencode/skills/${skill}/SKILL.md"
+            if [ ! -f "$file" ]; then
+              echo "::error::Missing ${file}. Restore it from the commit in .opencode/skills/README.md."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
       - name: Configure git
         run: |
           git config --global user.name "github-actions[bot]"
