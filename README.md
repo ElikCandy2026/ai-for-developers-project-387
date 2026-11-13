@@ -510,8 +510,20 @@ Workflow [`skills-smoke.yml`](.github/workflows/skills-smoke.yml) дополни
 `.opencode/skills` в конфиге, а затем загружает `to-spec`, `to-tickets` и
 `implement-spec` через инструмент `skill` и убеждается, что загружен именно
 проектный экземпляр. Отчёт и JSON-логи прогона сохраняются в артефакте
-`skills-smoke`. В PR из форков секрет модели недоступен, поэтому там выполняются
-только проверки файлов и конфига.
+`skills-smoke`. В PR из форков вызов модели пропускается, чтобы код форка не
+запускал модель за счёт репозитория; там выполняются только проверки файлов и
+конфига.
+
+Проверка на чистом раннере: прогон
+[43367738307](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43367738307)
+загрузил все три навыка из
+`/home/runner/work/ai-for-developers-project-387/ai-for-developers-project-387/.opencode/skills/<id>`.
+Таблица с путями есть в summary прогона, JSON-логи вызовов `skill` — в артефакте
+`skills-smoke`. Первый прогон
+([43367569658](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43367569658))
+пропустил загрузку: условие требовало `OPENCODE_API_KEY`, которого в репозитории
+нет, хотя бесплатная модель работает без ключа. Условие заменили на проверку
+события, а каждый вызов ограничили `timeout 300`.
 
 ### Автотриаж новых issues
 
