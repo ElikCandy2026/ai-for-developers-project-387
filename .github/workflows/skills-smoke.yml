@@ -75,10 +75,10 @@ jobs:
           echo "opencode.json registers .opencode/skills"
 
       - name: Load each skill through the skill tool
-        # Fork PRs do not receive the model secret. The file and config checks
-        # above still run there; the invocation runs for dispatch and same-repo
-        # PRs, where the secret is available.
-        if: env.OPENCODE_API_KEY != ''
+        # The free model works without a key, so the invocation is gated by the
+        # event, not by the secret. Fork PRs are skipped so their code cannot
+        # drive a model run with this repository's credentials or quota.
+        if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
           set -euo pipefail
           printf '| Skill | Skill tool call | Loaded from project |\n| --- | --- | --- |\n' > "$REPORT_DIR/summary.md"
@@ -86,7 +86,7 @@ jobs:
           for skill in to-spec to-tickets implement-spec; do
             jsonl="$REPORT_DIR/${skill}.jsonl"
             err="$REPORT_DIR/${skill}.err"
-            if ! opencode run --standalone --format json --auto --model "$MODEL" \
+            if ! timeout 300 opencode run --standalone --format json --auto --model "$MODEL" \
               "Load the @${skill} skill with the skill tool. Do not publish anything, do not create issues, and do not modify files. After it loads, reply with the skill's first heading and the word LOADED." \
               > "$jsonl" 2> "$err"; then
               echo "::error::opencode run failed for ${skill}; see ${skill}.err"
@@ -122,10 +122,10 @@ jobs:
           exit "$failed"
 
       - name: Note skipped invocation
-        if: env.OPENCODE_API_KEY == ''
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
         run: |
-          echo "::warning::OPENCODE_API_KEY is not available (fork PR); only file and config checks ran."
-          echo "Invocation skipped: no model secret on this event." >> "$GITHUB_STEP_SUMMARY"
+          echo "::warning::Fork PR: only file and config checks ran."
+          echo "Invocation skipped: fork PR." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload evidence
         if: always()
