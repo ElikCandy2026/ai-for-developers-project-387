@@ -535,8 +535,9 @@ Workflow [`.github/workflows/triage.yml`](.github/workflows/triage.yml)
 | Параметр | Значение |
 | --- | --- |
 | Событие | `issues: [opened]` — только создание issue |
+| Повторный запуск | `workflow_dispatch` с номером issue, если прогон упал |
 | Prompt | инструкция разобрать issue по `docs/agents/` и не менять код |
-| Модель | `opencode/deepseek-v4.1-flash-free` |
+| Модель | `opencode/glm-5.3-flash-free`; переопределяется переменной `TRIAGE_MODEL` |
 | Авторы | только `OWNER`, `MEMBER` и `COLLABORATOR`; боты игнорируются |
 | Таймаут | `timeout-minutes: 30` |
 | Параллельность | `concurrency` по номеру issue, `cancel-in-progress: false` |
