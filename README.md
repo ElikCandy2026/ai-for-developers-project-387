@@ -506,8 +506,8 @@ OpenCode устанавливать не нужно.
 
 Перед вызовом модели `opencode.yml` проверяет, что все шесть `SKILL.md` на месте.
 Workflow [`skills-smoke.yml`](.github/workflows/skills-smoke.yml) дополнительно
-запускается вручную и на PR, меняющие skills: он проверяет frontmatter и источник
-`.opencode/skills` в конфиге, а затем загружает `to-spec`, `to-tickets` и
+запускается вручную и на PR, которые меняют skills: он проверяет frontmatter и
+источник `.opencode/skills` в конфиге, а затем загружает `to-spec`, `to-tickets` и
 `implement-spec` через инструмент `skill` и убеждается, что загружен именно
 проектный экземпляр. Отчёт и JSON-логи прогона сохраняются в артефакте
 `skills-smoke`. В PR из форков вызов модели пропускается, чтобы код форка не
