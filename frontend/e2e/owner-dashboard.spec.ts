@@ -26,6 +26,9 @@ const VIEWPORTS = [
 const LONG_GUEST_NAME = 'Анастасия Константинопольская';
 const LONG_GUEST_EMAIL = 'anastasia.konstantinopolskaya@example.com';
 const LONG_DESCRIPTION = `Интеграция, сроки и бюджет проекта. ${'Подробноеописание'.repeat(6)}`;
+const LONG_NOTE =
+  'Обсудить интеграцию, сроки и бюджет проекта: ' +
+  'https://example.com/integration/scope/timeline/budget/details';
 
 async function seedMeetingTypeWithLongDescription(
   request: APIRequestContext,
@@ -55,7 +58,7 @@ async function seedBookingWithLongContacts(request: APIRequestContext): Promise<
         start,
         guestName: LONG_GUEST_NAME,
         guestEmail: LONG_GUEST_EMAIL,
-        notes: 'Обсудить интеграцию, сроки и бюджет проекта: https://example.com/integration/scope/timeline/budget/details',
+        notes: LONG_NOTE,
       },
     });
     expect(response.ok()).toBeTruthy();
@@ -101,6 +104,9 @@ for (const viewport of VIEWPORTS) {
     await expect(page.getByRole('button', { name: 'Кабинет владельца' })).toBeVisible();
     await expect(page.locator('.booking-row').first()).toBeVisible();
     await expect(page.locator('.type-list-row', { hasText: typeName })).toBeVisible();
+    await expect(
+      page.locator('.booking-notes', { hasText: 'https://example.com' }).first(),
+    ).toBeVisible();
 
     const geometry = await measureOwnerPage(page);
 
