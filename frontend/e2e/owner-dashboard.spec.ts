@@ -18,6 +18,7 @@ type Geometry = {
 
 const VIEWPORTS = [
   { width: 375, height: 812 },
+  { width: 320, height: 812 },
   { width: 768, height: 1024 },
 ];
 
