@@ -1886,7 +1886,7 @@ svg {
   color: var(--muted-strong);
   font-size: 11px;
   line-height: 1.45;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
 .booking-notes svg {
