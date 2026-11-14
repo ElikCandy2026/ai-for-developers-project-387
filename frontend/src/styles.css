@@ -1526,8 +1526,10 @@ svg {
 .owner-profile-card {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 13px;
   flex: 0 0 auto;
+  max-width: 100%;
   padding: 14px 17px 14px 14px;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -1539,15 +1541,23 @@ svg {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .owner-profile-card strong {
+  overflow: hidden;
   font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .owner-profile-card span:not(.owner-status):not(.owner-avatar) {
+  overflow: hidden;
+  max-width: 100%;
   color: var(--muted);
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .owner-status {
@@ -2083,7 +2093,7 @@ svg {
   }
 
   .owner-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .owner-sidebar {
