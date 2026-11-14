@@ -1,15 +1,13 @@
 import { expect, test } from '@playwright/test';
 
+import { fetchAvailability } from './api';
+
 type SavedBooking = {
   id: string;
   meetingType: { id: string; name: string };
   guestName: string;
   guestEmail: string;
   start: string;
-};
-
-type Availability = {
-  days: Array<{ slots: Array<{ start: string }> }>;
 };
 
 test('guest picks a meeting type and a slot, then books it', async ({ page, request }) => {
@@ -58,11 +56,7 @@ test('guest picks a meeting type and a slot, then books it', async ({ page, requ
   expect(booking.guestName).toBe('Иван Петров');
   expect(booking.meetingType.name).toBe('Знакомство');
 
-  const availabilityResponse = await request.get(
-    `/api/meeting-types/${booking.meetingType.id}/availability`,
-  );
-  expect(availabilityResponse.ok()).toBeTruthy();
-  const availability = (await availabilityResponse.json()) as Availability;
+  const availability = await fetchAvailability(request, booking.meetingType.id);
   const offeredStarts = availability.days.flatMap((day) => day.slots.map((slot) => slot.start));
   expect(offeredStarts).not.toContain(booking.start);
 });
