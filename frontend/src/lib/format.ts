@@ -84,13 +84,20 @@ export function formatMonthLong(date: string): string {
 }
 
 export function formatDateRange(start: string, end: string): string {
-  const startMonth = formatMonthLong(start);
-  const endMonth = formatMonthLong(end);
   const year = end.slice(0, 4);
   if (start.slice(0, 7) === end.slice(0, 7)) {
-    return `${formatDayNumber(start)}–${formatDayNumber(end)} ${endMonth} ${year}`;
+    return `${formatDayNumber(start)}–${formatDayNumber(end)} ${formatMonthGenitive(end)} ${year}`;
   }
-  return `${formatDayNumber(start)} ${startMonth} — ${formatDayNumber(end)} ${endMonth} ${year}`;
+  return `${formatDayNumber(start)} ${formatMonthGenitive(start)} — ${formatDayNumber(end)} ${formatMonthGenitive(end)} ${year}`;
+}
+
+function formatMonthGenitive(date: string): string {
+  const parts = new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+  }).formatToParts(localDateAsUtcNoon(date));
+  return parts.find((part) => part.type === 'month')?.value ?? '';
 }
 
 export function formatLocalDateLong(date: string): string {
