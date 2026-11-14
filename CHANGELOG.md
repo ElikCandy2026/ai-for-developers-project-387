@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.3.1...v1.3.2) (2026-11-14)
+
+
+### Bug Fixes
+
+* keep the owner dashboard inside narrow screens ([#37](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/37)) ([#40](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/40)) ([e54c0c2](https://github.com/ElikCandy2026/ai-for-developers-project-387/commit/e54c0c2e90dc1e6fe7579fe65befad2cc20747b4))
+
 ## [1.3.1](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.3.0...v1.3.1) (2026-11-13)
 
 
