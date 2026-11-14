@@ -1,6 +1,13 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "skills": [".opencode/skills"],
+  "permissions": [
+    {
+      "action": "external_directory",
+      "resource": "*",
+      "effect": "allow"
+    }
+  ],
   "mcp": {
     "servers": {
       "render": {
