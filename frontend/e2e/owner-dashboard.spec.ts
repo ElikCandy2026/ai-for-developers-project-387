@@ -1,20 +1,21 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
-type MeetingType = {
-  id: string;
-  name: string;
+import { fetchAvailability, firstAvailableSlot, listMeetingTypes } from './api';
+
+type Bounds = {
+  left: number;
+  right: number;
 };
 
-type Availability = {
-  days: Array<{ slots: Array<{ start: string }> }>;
-};
-
-type Geometry = {
+type LayoutMetrics = {
   viewportWidth: number;
   scrollWidth: number;
-  profile: { left: number; right: number } | null;
-  rows: Array<{ left: number; right: number }>;
+  profile: Bounds | null;
+  cards: Bounds[];
+  rows: Bounds[];
 };
+
+const SUBPIXEL_TOLERANCE = 1;
 
 const VIEWPORTS = [
   { width: 375, height: 812 },
@@ -24,43 +25,45 @@ const VIEWPORTS = [
 
 const LONG_GUEST_NAME = 'Анастасия Константинопольская';
 const LONG_GUEST_EMAIL = 'anastasia.konstantinopolskaya@example.com';
+const LONG_DESCRIPTION = `Интеграция, сроки и бюджет проекта. ${'Подробноеописание'.repeat(6)}`;
+
+async function seedMeetingTypeWithLongDescription(request: APIRequestContext): Promise<void> {
+  const response = await request.post('/api/meeting-types', {
+    data: {
+      name: 'Длинное описание',
+      description: LONG_DESCRIPTION,
+      durationMinutes: 30,
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+}
 
 async function seedBookingWithLongContacts(request: APIRequestContext): Promise<void> {
-  const typesResponse = await request.get('/api/meeting-types');
-  expect(typesResponse.ok()).toBeTruthy();
-  const meetingTypes = (await typesResponse.json()) as MeetingType[];
-  expect(meetingTypes.length).toBeGreaterThan(0);
-
-  for (const meetingType of meetingTypes) {
-    const availabilityResponse = await request.get(
-      `/api/meeting-types/${meetingType.id}/availability`,
-    );
-    expect(availabilityResponse.ok()).toBeTruthy();
-    const availability = (await availabilityResponse.json()) as Availability;
-    const firstSlot = availability.days.flatMap((day) => day.slots)[0];
-    if (!firstSlot) {
+  for (const meetingType of await listMeetingTypes(request)) {
+    const availability = await fetchAvailability(request, meetingType.id);
+    const start = firstAvailableSlot(availability);
+    if (!start) {
       continue;
     }
 
-    const bookingResponse = await request.post('/api/bookings', {
+    const response = await request.post('/api/bookings', {
       data: {
         meetingTypeId: meetingType.id,
-        start: firstSlot.start,
+        start,
         guestName: LONG_GUEST_NAME,
         guestEmail: LONG_GUEST_EMAIL,
         notes: 'Обсудить интеграцию, сроки и бюджет проекта.',
       },
     });
-    expect(bookingResponse.ok()).toBeTruthy();
+    expect(response.ok()).toBeTruthy();
     return;
   }
 
   throw new Error('No available slot to seed a booking with long contacts');
 }
 
-async function measureOwnerPage(page: Page): Promise<Geometry> {
+async function measureOwnerPage(page: Page): Promise<LayoutMetrics> {
   return page.evaluate(() => {
-    const viewportWidth = window.innerWidth;
     const toBounds = (element: Element) => {
       const rect = element.getBoundingClientRect();
       return { left: rect.left, right: rect.right };
@@ -68,10 +71,13 @@ async function measureOwnerPage(page: Page): Promise<Geometry> {
     const profile = document.querySelector('.owner-profile-card');
 
     return {
-      viewportWidth,
+      viewportWidth: window.innerWidth,
       scrollWidth: document.documentElement.scrollWidth,
       profile: profile ? toBounds(profile) : null,
-      rows: Array.from(document.querySelectorAll('.booking-row')).map(toBounds),
+      cards: Array.from(
+        document.querySelectorAll('.stat-card, .form-card, .bookings-card, .types-card'),
+      ).map(toBounds),
+      rows: Array.from(document.querySelectorAll('.booking-row, .type-list-row')).map(toBounds),
     };
   });
 }
@@ -81,23 +87,33 @@ for (const viewport of VIEWPORTS) {
     page,
     request,
   }) => {
+    await seedMeetingTypeWithLongDescription(request);
     await seedBookingWithLongContacts(request);
 
     await page.setViewportSize(viewport);
     await page.goto('/#owner');
     await expect(page.getByRole('heading', { name: 'Ваш календарь звонков' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Записаться' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Кабинет владельца' })).toBeVisible();
     await expect(page.locator('.booking-row').first()).toBeVisible();
 
     const geometry = await measureOwnerPage(page);
 
-    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(
+      geometry.viewportWidth + SUBPIXEL_TOLERANCE,
+    );
     expect(geometry.profile).not.toBeNull();
-    expect(geometry.profile!.left).toBeGreaterThanOrEqual(-1);
-    expect(geometry.profile!.right).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+    expect(geometry.cards.length).toBeGreaterThan(0);
     expect(geometry.rows.length).toBeGreaterThan(0);
-    for (const row of geometry.rows) {
-      expect(row.left).toBeGreaterThanOrEqual(-1);
-      expect(row.right).toBeLessThanOrEqual(geometry.viewportWidth + 1);
+
+    const profile = geometry.profile;
+    if (!profile) {
+      throw new Error('The owner profile card is missing');
+    }
+
+    for (const bounds of [profile, ...geometry.cards, ...geometry.rows]) {
+      expect(bounds.left).toBeGreaterThanOrEqual(-SUBPIXEL_TOLERANCE);
+      expect(bounds.right).toBeLessThanOrEqual(geometry.viewportWidth + SUBPIXEL_TOLERANCE);
     }
   });
 }
