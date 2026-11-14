@@ -152,6 +152,11 @@ describe('App guest page', () => {
     const dateButtons = within(rail).getAllByRole('button');
     expect(dateButtons).toHaveLength(1);
     await waitFor(() => expect(dateButtons[0].getAttribute('aria-pressed')).toBe('true'));
+
+    const visible = (dateButtons[0].textContent ?? '').replace(/\s+/g, ' ').trim();
+    const accessibleName = dateButtons[0].getAttribute('aria-label') ?? '';
+    expect(visible).not.toBe('');
+    expect(accessibleName.toLowerCase()).toContain(visible.toLowerCase());
   });
 
   it('leads from a slot to the booking form and confirms the booking', async () => {
