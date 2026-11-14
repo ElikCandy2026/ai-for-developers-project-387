@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.3](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.3.2...v1.3.3) (2026-11-14)
+
+
+### Bug Fixes
+
+* wrap long tokens in booking notes ([#39](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/39)) ([#42](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/42)) ([2c702d0](https://github.com/ElikCandy2026/ai-for-developers-project-387/commit/2c702d04b3e183b9ed0b33c76eeb418f9825ff99))
+
 ## [1.3.2](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.3.1...v1.3.2) (2026-11-14)
 
 
