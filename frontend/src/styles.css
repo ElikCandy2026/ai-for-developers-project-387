@@ -6,7 +6,8 @@
   --surface-soft: #fbfaf4;
   --ink: #17261e;
   --ink-soft: #33443a;
-  --muted: #6a776e;
+  /* At least 4.5:1 on --surface-soft and --green-soft (see #51). */
+  --muted: #5f6d63;
   --muted-strong: #536258;
   --line: #e2e3d8;
   --line-strong: #cfd3c4;
