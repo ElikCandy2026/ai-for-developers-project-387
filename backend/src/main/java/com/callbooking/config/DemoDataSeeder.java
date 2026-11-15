@@ -1,7 +1,7 @@
 package com.callbooking.config;
 
-import org.springframework.boot.ApplicationArguments;
-import org.springframework.boot.ApplicationRunner;
+import jakarta.annotation.PostConstruct;
+
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -12,10 +12,15 @@ import com.callbooking.persistence.MeetingTypeRepository;
  * Optional demo content so a fresh checkout has something to show. It is only
  * added when the meeting type table is empty and can be disabled with
  * SEED_DEMO_DATA=false.
+ *
+ * <p>Seeding runs in {@code @PostConstruct} rather than as an {@code
+ * ApplicationRunner}: the web server starts accepting connections before
+ * runners execute, so the first request could see a half-seeded database
+ * (#59). Bean initialization happens before the connector is up.
  */
 @Component
 @ConditionalOnProperty(prefix = "app", name = "seed-demo-data", havingValue = "true")
-public class DemoDataSeeder implements ApplicationRunner {
+public class DemoDataSeeder {
 
     private final MeetingTypeRepository repository;
     private final MeetingTypeService meetingTypeService;
@@ -25,8 +30,8 @@ public class DemoDataSeeder implements ApplicationRunner {
         this.meetingTypeService = meetingTypeService;
     }
 
-    @Override
-    public void run(ApplicationArguments args) {
+    @PostConstruct
+    void seed() {
         if (repository.count() > 0) {
             return;
         }
