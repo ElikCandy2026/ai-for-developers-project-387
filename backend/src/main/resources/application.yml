@@ -18,6 +18,14 @@ spring:
   jackson:
     serialization:
       write-dates-as-timestamps: false
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          # The SPA shell has to be revalidated, otherwise a deployment is
+          # invisible until the browser cache expires. Hashed /assets files get
+          # an immutable one-year policy in WebConfig instead.
+          no-cache: true
 
 app:
   database-path: ${DB_PATH:./data/call-booking.db}
