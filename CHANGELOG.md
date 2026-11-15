@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.6](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.3.5...v1.3.6) (2026-11-15)
+
+
+### Bug Fixes
+
+* seed demo data before the server accepts requests ([#59](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/59)) ([#60](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/60)) ([bea76b5](https://github.com/ElikCandy2026/ai-for-developers-project-387/commit/bea76b5b83cbb21cf3163a7ee67c58d08c738f43))
+
 ## [1.3.5](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.3.4...v1.3.5) (2026-11-15)
 
 
