@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.4](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.3.3...v1.3.4) (2026-11-15)
+
+
+### Bug Fixes
+
+* correct calendar date labels ([#32](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/32), [#43](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/43)) ([#48](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/48)) ([f800123](https://github.com/ElikCandy2026/ai-for-developers-project-387/commit/f8001238769a86c125647cc382a2cf6bb8acd4f6))
+
 ## [1.3.3](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.3.2...v1.3.3) (2026-11-14)
 
 
