@@ -54,6 +54,15 @@ class StaticResourceCacheTest {
         assertThat(response.getHeaders().getFirst(HttpHeaders.CACHE_CONTROL)).contains("no-cache");
     }
 
+    @Test
+    void servesTheSpaShellWithRevalidation() {
+        ResponseEntity<String> response = rest.getForEntity("/", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).contains("Callbook test shell");
+        assertThat(response.getHeaders().getFirst(HttpHeaders.CACHE_CONTROL)).contains("no-cache");
+    }
+
     private static Path createDatabaseFile() {
         try {
             Path directory = Files.createTempDirectory("call-booking-cache-test");
