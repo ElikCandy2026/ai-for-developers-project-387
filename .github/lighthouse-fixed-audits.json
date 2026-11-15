@@ -17,6 +17,7 @@
     "issue": 32,
     "fixPr": 48,
     "fixedValue": "score 1, 0 элементов с несоответствием",
-    "page": "http://127.0.0.1:8080/"
+    "page": "http://127.0.0.1:8080/",
+    "fixCommit": "f8001238769a86c125647cc382a2cf6bb8acd4f6"
   }
 }

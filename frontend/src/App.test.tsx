@@ -160,35 +160,44 @@ describe('App guest page', () => {
   });
 
   it('includes the relative day label in the date button name', async () => {
-    const today = todayInZone(owner.rules.timezone);
-    vi.mocked(api.fetchAvailability).mockImplementation(async (meetingTypeId) => {
-      const type = meetingTypes.find((item) => item.id === meetingTypeId) ?? introType;
-      const weekday = new Intl.DateTimeFormat('en-US', {
-        weekday: 'long',
-        timeZone: 'UTC',
-      })
-        .format(new Date(`${today}T12:00:00.000Z`))
-        .toUpperCase() as DayOfWeek;
-      const availability = availabilityFor(type);
-      return {
-        ok: true,
-        data: {
-          ...availability,
-          windowStartDate: today,
-          windowEndDate: addDays(today, 14),
-          days: [{ date: today, weekday, slots: [slotFor(type)] }],
-        },
-      };
-    });
+    // Freeze only Date so the test and the component agree on "today";
+    // real timers stay in place for findBy.
+    vi.useFakeTimers({ toFake: ['Date'], shouldAdvanceTime: true });
+    vi.setSystemTime(new Date('2026-11-15T09:00:00.000Z'));
+    try {
+      const today = todayInZone(owner.rules.timezone);
+      vi.mocked(api.fetchAvailability).mockImplementation(async (meetingTypeId) => {
+        const type = meetingTypes.find((item) => item.id === meetingTypeId) ?? introType;
+        const weekday = new Intl.DateTimeFormat('en-US', {
+          weekday: 'long',
+          timeZone: 'UTC',
+        })
+          .format(new Date(`${today}T12:00:00.000Z`))
+          .toUpperCase() as DayOfWeek;
+        const availability = availabilityFor(type);
+        return {
+          ok: true,
+          data: {
+            ...availability,
+            windowStartDate: today,
+            windowEndDate: addDays(today, owner.rules.bookingWindowDays),
+            days: [{ date: today, weekday, slots: [slotFor(type)] }],
+          },
+        };
+      });
 
-    render(<App />);
+      render(<App />);
 
-    const rail = await screen.findByRole('group', { name: 'Даты окна записи' });
-    const [dateButton] = within(rail).getAllByRole('button');
-    expect(dateButton.textContent).toContain('Сегодня');
+      const rail = await screen.findByRole('group', { name: 'Даты окна записи' });
+      const [dateButton] = within(rail).getAllByRole('button');
+      const visible = (dateButton.textContent ?? '').replace(/\s+/g, ' ').trim();
+      expect(visible).toContain('Сегодня');
 
-    const accessibleName = dateButton.getAttribute('aria-label') ?? '';
-    expect(accessibleName).toContain('Сегодня');
+      const accessibleName = dateButton.getAttribute('aria-label') ?? '';
+      expect(accessibleName.toLowerCase()).toContain(visible.toLowerCase());
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('leads from a slot to the booking form and confirms the booking', async () => {
