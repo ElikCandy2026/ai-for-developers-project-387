@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import type { Availability, Booking, DayOfWeek, MeetingType, Owner } from './data/api';
 import * as api from './data/api';
-import { addDays, formatTime, todayInZone } from './lib/format';
+import { WEEKDAY_SHORT, addDays, formatTime, todayInZone } from './lib/format';
 
 vi.mock('./data/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./data/api')>();
@@ -166,14 +166,24 @@ describe('App guest page', () => {
     vi.setSystemTime(new Date('2026-11-15T09:00:00.000Z'));
     try {
       const today = todayInZone(owner.rules.timezone);
-      vi.mocked(api.fetchAvailability).mockImplementation(async (meetingTypeId) => {
-        const type = meetingTypes.find((item) => item.id === meetingTypeId) ?? introType;
+      const dates = [today, addDays(today, 1), addDays(today, 2)];
+      const days = dates.map((date) => {
         const weekday = new Intl.DateTimeFormat('en-US', {
           weekday: 'long',
           timeZone: 'UTC',
         })
-          .format(new Date(`${today}T12:00:00.000Z`))
+          .format(new Date(`${date}T12:00:00.000Z`))
           .toUpperCase() as DayOfWeek;
+        const start = new Date(`${date}T07:00:00.000Z`);
+        const end = new Date(start.getTime() + introType.durationMinutes * 60_000);
+        return {
+          date,
+          weekday,
+          slots: [{ start: start.toISOString(), end: end.toISOString() }],
+        };
+      });
+      vi.mocked(api.fetchAvailability).mockImplementation(async (meetingTypeId) => {
+        const type = meetingTypes.find((item) => item.id === meetingTypeId) ?? introType;
         const availability = availabilityFor(type);
         return {
           ok: true,
@@ -181,7 +191,7 @@ describe('App guest page', () => {
             ...availability,
             windowStartDate: today,
             windowEndDate: addDays(today, owner.rules.bookingWindowDays),
-            days: [{ date: today, weekday, slots: [slotFor(type)] }],
+            days,
           },
         };
       });
@@ -189,12 +199,20 @@ describe('App guest page', () => {
       render(<App />);
 
       const rail = await screen.findByRole('group', { name: 'Даты окна записи' });
-      const [dateButton] = within(rail).getAllByRole('button');
-      const visible = (dateButton.textContent ?? '').replace(/\s+/g, ' ').trim();
-      expect(visible).toContain('Сегодня');
+      const dateButtons = within(rail).getAllByRole('button');
+      expect(dateButtons).toHaveLength(dates.length);
 
-      const accessibleName = dateButton.getAttribute('aria-label') ?? '';
-      expect(accessibleName.toLowerCase()).toContain(visible.toLowerCase());
+      const visibleLabels = dateButtons.map((button) =>
+        (button.textContent ?? '').replace(/\s+/g, ' ').trim(),
+      );
+      expect(visibleLabels[0]).toContain('Сегодня');
+      expect(visibleLabels[1]).toContain('Завтра');
+      expect(visibleLabels[2].startsWith(WEEKDAY_SHORT[days[2].weekday])).toBe(true);
+
+      dateButtons.forEach((button, index) => {
+        const accessibleName = button.getAttribute('aria-label') ?? '';
+        expect(accessibleName.toLowerCase()).toContain(visibleLabels[index].toLowerCase());
+      });
     } finally {
       vi.useRealTimers();
     }
