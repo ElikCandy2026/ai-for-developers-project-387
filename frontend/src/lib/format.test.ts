@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { ownerInitials } from './format';
+import { formatDateRange, ownerInitials } from './format';
+
+describe('formatDateRange', () => {
+  it('uses the genitive month for a range inside one month', () => {
+    expect(formatDateRange('2026-11-12', '2026-11-25')).toBe('12–25 ноября 2026');
+  });
+
+  it('uses the genitive month for both months across a month boundary', () => {
+    expect(formatDateRange('2026-11-28', '2026-12-03')).toBe('28 ноября — 3 декабря 2026');
+  });
+});
 
 describe('ownerInitials', () => {
   it('takes the first letters of the first two name parts in upper case', () => {

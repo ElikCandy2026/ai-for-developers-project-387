@@ -303,6 +303,13 @@ export function GuestBooking({ owner, meetingTypes, onOpenOwner }: GuestBookingP
                   const disabled = day.slots.length === 0;
                   const active = day.date === selectedDate;
                   const relative = relativeDateLabel(day.date, today);
+                  const weekday = relative ?? WEEKDAY_SHORT[day.weekday];
+                  const dayNumber = day.date.slice(8, 10);
+                  const month = formatMonthLong(day.date).slice(0, 3);
+                  const slots = disabled ? 'Нет свободных слотов' : `${day.slots.length} слотов`;
+                  // The accessible name has to contain the visible text verbatim,
+                  // otherwise the label-content-name-mismatch audit fails.
+                  const visibleLabel = `${weekday} ${dayNumber} ${month}`;
                   return (
                     <button
                       key={day.date}
@@ -311,11 +318,11 @@ export function GuestBooking({ owner, meetingTypes, onOpenOwner }: GuestBookingP
                       onClick={() => setSelectedDate(day.date)}
                       disabled={disabled}
                       aria-pressed={active}
-                      aria-label={`${WEEKDAY_LONG[day.weekday]}, ${day.date}. ${disabled ? 'Нет свободных слотов' : `${day.slots.length} слотов`}`}
+                      aria-label={`${visibleLabel}. ${WEEKDAY_LONG[day.weekday]}, ${day.date}. ${slots}`}
                     >
-                      <span className="date-weekday">{relative ?? WEEKDAY_SHORT[day.weekday]}</span>
-                      <strong className="date-number">{day.date.slice(8, 10)}</strong>
-                      <span className="date-month">{formatMonthLong(day.date).slice(0, 3)}</span>
+                      <span className="date-weekday">{weekday}</span>{' '}
+                      <strong className="date-number">{dayNumber}</strong>{' '}
+                      <span className="date-month">{month}</span>{' '}
                       <span className={`date-dot ${disabled ? 'muted' : ''}`} />
                     </button>
                   );
