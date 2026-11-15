@@ -32,6 +32,105 @@ jobs:
       pull-requests: write
       issues: write
     steps:
+      # Both comment events and every rerun attempt count against one budget
+      # per pull request. The counter lives in a tracker comment, because for
+      # issue_comment the run's head_branch is the default branch, not the PR.
+      - name: Check /oc budget
+        id: budget
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          MAX_INVOCATIONS: "5"
+        run: |
+          set -euo pipefail
+
+          pr=""
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request_review_comment" ]; then
+            pr=$(jq -r '.pull_request.number' "${GITHUB_EVENT_PATH}")
+          elif jq -e '.issue.pull_request' "${GITHUB_EVENT_PATH}" >/dev/null 2>&1; then
+            pr=$(jq -r '.issue.number' "${GITHUB_EVENT_PATH}")
+          fi
+          if [ -z "${pr}" ]; then
+            echo "Not a pull request: the /oc budget is not applied."
+            echo "over=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          sha=$(gh api "repos/${GH_REPO}/pulls/${pr}" --jq .head.sha)
+          run_url="${GITHUB_SERVER_URL}/${GH_REPO}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}"
+          marker='<!-- opencode-budget -->'
+
+          # The tracker is always posted as an issue comment, so the issue
+          # comments endpoint finds it for both event types.
+          comments=$(gh api --paginate \
+            "repos/${GH_REPO}/issues/${pr}/comments?per_page=100" | jq -s 'add // []')
+          tracker=$(jq -c --arg marker "${marker}" \
+            '[.[] | select(.body | contains($marker))] | last // empty' <<<"${comments}")
+          if [ -n "${tracker}" ]; then
+            tracker_id=$(jq -r '.id' <<<"${tracker}")
+            used=$(jq -r '.body' <<<"${tracker}" \
+              | sed -n 's/.*<!-- opencode-budget: used=\([0-9][0-9]*\) -->.*/\1/p' | tail -1)
+            used=${used:-0}
+          else
+            tracker_id=""
+            used=0
+          fi
+          used=$((used + 1))
+
+          tracker_body=$(mktemp)
+          if [ "${used}" -gt "${MAX_INVOCATIONS}" ]; then
+            state="Бюджет исчерпан: **${used} из ${MAX_INVOCATIONS}**. Модель не вызывается."
+          else
+            state="Использовано: **${used} из ${MAX_INVOCATIONS}**."
+          fi
+          {
+            echo "${marker}"
+            echo "<!-- opencode-budget: used=${used} -->"
+            echo "### Бюджет обращений \`/oc\` в этом PR"
+            echo
+            echo "${state}"
+            echo
+            echo "Считаются оба вида комментариев и повторные попытки. Лимит задаётся \`MAX_INVOCATIONS\` в \`opencode.yml\`."
+          } > "${tracker_body}"
+          if [ -n "${tracker_id}" ]; then
+            gh api -X PATCH "repos/${GH_REPO}/issues/comments/${tracker_id}" \
+              -F "body=@${tracker_body}" >/dev/null
+          else
+            gh api -X POST "repos/${GH_REPO}/issues/${pr}/comments" \
+              -F "body=@${tracker_body}" >/dev/null
+          fi
+
+          if [ "${used}" -gt "${MAX_INVOCATIONS}" ]; then
+            refusal=$(mktemp)
+            {
+              echo "<!-- opencode-budget-refusal -->"
+              echo "### Отказ: \`limit_exhausted\`"
+              echo
+              echo "Бюджет обращений \`/oc\` к агенту для этого PR исчерпан: **${used} из ${MAX_INVOCATIONS}**. Модель не вызывалась."
+              echo
+              echo "- Причина: \`limit_exhausted\`"
+              echo "- SHA: \`${sha}\`"
+              echo "- Попытка: \`${GITHUB_RUN_ATTEMPT}\`"
+              echo "- Логи: ${run_url}"
+              echo
+              echo "Новые \`/oc\` в этом PR не будут отправлены модели. Лимит задаётся \`MAX_INVOCATIONS\` в \`opencode.yml\`."
+            } > "${refusal}"
+            gh api -X POST "repos/${GH_REPO}/issues/${pr}/comments" \
+              -F "body=@${refusal}" >/dev/null
+            echo "over=true" >> "${GITHUB_OUTPUT}"
+            echo "::warning title=limit_exhausted::Бюджет /oc исчерпан (${used}/${MAX_INVOCATIONS}); модель не вызывается. ${run_url}"
+            {
+              echo "### /oc: limit_exhausted"
+              echo
+              echo "- SHA: \`${sha}\`"
+              echo "- Попытка: ${GITHUB_RUN_ATTEMPT}"
+              echo "- Логи: ${run_url}"
+            } >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "over=false" >> "${GITHUB_OUTPUT}"
+            echo "Invocation ${used}/${MAX_INVOCATIONS} for PR #${pr} at ${sha}."
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
@@ -58,6 +157,8 @@ jobs:
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Run opencode
+        # success() keeps the model uncalled if the budget check itself failed.
+        if: success() && steps.budget.outputs.over != 'true'
         uses: anomalyco/opencode/github@latest
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
