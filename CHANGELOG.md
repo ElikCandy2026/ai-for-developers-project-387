@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.5](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.3.4...v1.3.5) (2026-11-15)
+
+
+### Bug Fixes
+
+* cache hashed assets and revalidate the shell ([#53](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/53)) ([#55](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/55)) ([d191933](https://github.com/ElikCandy2026/ai-for-developers-project-387/commit/d191933e60bc8d9ec729bebe80953d2782f9a3fd))
+* raise the muted text contrast above 4.5:1 ([#51](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/51)) ([#54](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/54)) ([7afd26c](https://github.com/ElikCandy2026/ai-for-developers-project-387/commit/7afd26c728247d56244d949e0e53b161f9846b4c))
+
 ## [1.3.4](https://github.com/ElikCandy2026/ai-for-developers-project-387/compare/v1.3.3...v1.3.4) (2026-11-15)
 
 
