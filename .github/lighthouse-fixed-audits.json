@@ -26,5 +26,12 @@
     "fixCommit": "7afd26c728247d56244d949e0e53b161f9846b4c",
     "fixedValue": "score 1, 0 элементов с недостаточным контрастом",
     "page": "http://127.0.0.1:8080/"
+  },
+  "uses-long-cache-ttl": {
+    "issue": 53,
+    "fixPr": 55,
+    "fixCommit": "d191933e60bc8d9ec729bebe80953d2782f9a3fd",
+    "fixedValue": "score 1, 0 ресурсов с коротким кешем",
+    "page": "http://127.0.0.1:8080/#guest"
   }
 }

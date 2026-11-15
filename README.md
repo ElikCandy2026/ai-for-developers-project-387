@@ -676,7 +676,7 @@ audit снова получает score меньше 1, workflow:
 
 #### Результаты ручных запусков
 
-Все запуски сделаны из `main` 12 ноября 2026 года.
+Запуски 12 ноября 2026 года и актуальный baseline 15 ноября 2026 года сделаны из `main`.
 
 | Режим | Прогон | Результат |
 | --- | --- | --- |
@@ -689,6 +689,9 @@ audit снова получает score меньше 1, workflow:
 | `baseline` после сжатия | [43175203669](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43175203669) | 5 прогретых прогонов: Performance 98, TBT 0 ms, FCP 1.36 s, LCP 1.53 s, transfer 84 KiB, `uses-text-compression` = 1. |
 | `regression`, `target=local` | [43181808767](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43181808767) | Успешно. Приложение запущено без сжатия, аудит снова увидел `uses-text-compression` (194 KiB) и создал [#29](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/29) с разделом `## Повторное появление`: ссылки на [#23](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/23), [PR #24](https://github.com/ElikCandy2026/ai-for-developers-project-387/pull/24) и коммит `0647558`. Агент не вызывался. |
 | `live`, `target=render`, недоступный стенд | [43182094039](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43182094039) | Ожидаемо упал на `Wait for Render`: временно подставленный `RENDER_URL` не отвечал 180 с. В журнал [#18](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/18) добавлено «Данных нет» с причиной и оговоркой, что это не подтверждает исправление. |
+| `live`, ветка #32 | [43690163384](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43690163384) | Подтвердил исправление #32: `label-content-name-mismatch` score 1, 0 элементов. Создал [#51](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/51) про `color-contrast`: 9 подписей дней недели, 4.48:1. |
+| `live`, ветка #51 | [43691040546](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43691040546) | Подтвердил исправление #51: `color-contrast` score 1, Accessibility 100. Создал [#53](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/53) про `uses-long-cache-ttl`. |
+| `baseline` после исправлений | [43692490755](https://github.com/ElikCandy2026/ai-for-developers-project-387/actions/runs/43692490755) | 5 прогретых прогонов на `4cc6d12`: Performance 98, Accessibility 100, TBT 0 ms, main-thread 600 ms (медиана), LCP 1.52 s. `uses-text-compression`, `uses-long-cache-ttl`, `color-contrast` и `label-content-name-mismatch` — score 1. Актуальная база для [#19](https://github.com/ElikCandy2026/ai-for-developers-project-387/issues/19): 2.3 s из задачи не воспроизводятся, медиана 600 ms. |
 
 Отчёт каждого прогона лежит в артефакте `lighthouse-report` (JSON и HTML,
 хранение 14 дней); итоги агента продублированы в журнале
