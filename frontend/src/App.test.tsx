@@ -4,9 +4,9 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import App from './App';
-import type { Availability, Booking, MeetingType, Owner } from './data/api';
+import type { Availability, Booking, DayOfWeek, MeetingType, Owner } from './data/api';
 import * as api from './data/api';
-import { formatTime } from './lib/format';
+import { addDays, formatTime, todayInZone } from './lib/format';
 
 vi.mock('./data/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./data/api')>();
@@ -157,6 +157,38 @@ describe('App guest page', () => {
     const accessibleName = dateButtons[0].getAttribute('aria-label') ?? '';
     expect(visible).not.toBe('');
     expect(accessibleName.toLowerCase()).toContain(visible.toLowerCase());
+  });
+
+  it('includes the relative day label in the date button name', async () => {
+    const today = todayInZone(owner.rules.timezone);
+    vi.mocked(api.fetchAvailability).mockImplementation(async (meetingTypeId) => {
+      const type = meetingTypes.find((item) => item.id === meetingTypeId) ?? introType;
+      const weekday = new Intl.DateTimeFormat('en-US', {
+        weekday: 'long',
+        timeZone: 'UTC',
+      })
+        .format(new Date(`${today}T12:00:00.000Z`))
+        .toUpperCase() as DayOfWeek;
+      const availability = availabilityFor(type);
+      return {
+        ok: true,
+        data: {
+          ...availability,
+          windowStartDate: today,
+          windowEndDate: addDays(today, 14),
+          days: [{ date: today, weekday, slots: [slotFor(type)] }],
+        },
+      };
+    });
+
+    render(<App />);
+
+    const rail = await screen.findByRole('group', { name: 'Даты окна записи' });
+    const [dateButton] = within(rail).getAllByRole('button');
+    expect(dateButton.textContent).toContain('Сегодня');
+
+    const accessibleName = dateButton.getAttribute('aria-label') ?? '';
+    expect(accessibleName).toContain('Сегодня');
   });
 
   it('leads from a slot to the booking form and confirms the booking', async () => {

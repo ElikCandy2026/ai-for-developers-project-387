@@ -92,6 +92,8 @@ export function formatDateRange(start: string, end: string): string {
 }
 
 function formatMonthGenitive(date: string): string {
+  // The `day` part is what makes ru-RU return the genitive month ("ноября").
+  // Without it the formatter returns the nominative ("ноябрь") and #43 returns.
   const parts = new Intl.DateTimeFormat('ru-RU', {
     day: 'numeric',
     month: 'long',
